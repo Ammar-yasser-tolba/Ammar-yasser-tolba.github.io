@@ -70,7 +70,7 @@ const Cloud = (() => {
     mediaMaxKB: 400,            // per-image budget for base64 inside the doc
     docMaxKB: 2048,             // doc ceiling; imagery is dropped past this
     pushDelay: 700,             // coalesce a burst of admin edits into one PUT
-    pollMs: 30000,              // fallback cadence when streaming is unavailable
+    pollMs: 8000,               // fallback cadence when streaming is unavailable
   };
 
   /* ---- 2. scope ----------------------------------------------------------- */
@@ -522,8 +522,10 @@ const Cloud = (() => {
      when two people click in the same instant.
 
      Being a node like any other, a counter write also arrives on the open
-     stream: that is how a view on one device repaints every other visitor's
-     badge without a refresh.
+     stream: that is how a like or a view on one device repaints every other
+     visitor's badge at the instant it happens, with no refresh. readCounters()
+     covers the other half of the feel — the whole page's totals on load cost two
+     requests rather than one per card.
   -------------------------------------------------------------------------- */
   // A page re-render (language switch, live edit) must not re-fetch every total,
   // so the last known value is kept per node and key.
@@ -592,6 +594,54 @@ const Cloud = (() => {
   const bumpView = key => bumpCounter('views', key, 1);
   const readView = key => readCounter('views', key);
 
+  /**
+   * readNode(node) — every total of one meter in a single request.
+   *   {}    the node does not exist yet: every total is a real shared zero
+   *   map   key -> total
+   *   null  it could not be read at all, which must never be shown as 0
+   */
+  async function readNode(node) {
+    try {
+      const res = await call('GET', root() + '/' + node + '.json');
+      if (res.status === 401 || res.status === 403) { deny(res.status); return null; }
+      if (!res.ok) return null;
+      const data = await res.json();
+      if (data == null) return {};
+      return typeof data === 'object' ? data : null;
+    } catch (e) { return null; }
+  }
+
+  /**
+   * readCounters() — the whole page's likes AND views in two round trips instead
+   * of one per card per meter. This is what lets warm() stay cheap as the number
+   * of projects grows. null means neither meter could be read.
+   */
+  async function readCounters() {
+    if (!enabled()) return null;
+    const both = await Promise.all([readNode('likes'), readNode('views')]);
+    if (both[0] == null && both[1] == null) return null;
+    return { likes: both[0], views: both[1] };
+  }
+
+  // Totals that arrive inside a bigger payload (the initial pull, or a whole-tree
+  // put on the stream) still have to reach the page. `notBefore` is when that
+  // snapshot was taken, so a visitor's own click cannot be undone by older news.
+  function applyCounters(tree, notBefore) {
+    if (!tree || typeof Counts === 'undefined') return;
+    for (const node of ['likes', 'views']) {
+      const meter = Counts[node];
+      if (!meter) continue;
+      const cache = counterCache[node];
+      const map = tree[node];
+      if (map == null) { cache.clear(); meter.resetAll(0, notBefore); continue; }  // gone
+      for (const [k, v] of Object.entries(map)) {
+        const total = Number(v) || 0;
+        cache.set(k, total);
+        meter.note(k, total, notBefore);
+      }
+    }
+  }
+
   /* ---- 6. real-time watch ------------------------------------------------ */
 
   function scheduleRepull() {
@@ -612,31 +662,34 @@ const Cloud = (() => {
     if (!payload) return;                            // keep-alive
     const path = String(payload.path || '/');
     const data = payload.data;
-    // Counter nodes: keep the cache exact, and put a new view total straight
-    // onto the page. This is what makes another visitor's view visible here
-    // without a reload.
+    // Counter nodes: keep both caches exact and put the new total straight onto
+    // the page, for likes as well as views. This is what makes another visitor's
+    // click visible here without a reload.
     const counter = /^\/(likes|views)(?:\/([^/]+))?$/.exec(path);
     if (counter) {
       const node = counter[1];
+      const meter = typeof Counts !== 'undefined' && Counts[node];
       const cache = counterCache[node];
-      const show = (k, v) => {
-        if (node === 'views' && typeof Counts !== 'undefined') Counts.paint(k, v);
-      };
+      if (!meter) return;
       if (counter[2]) {
         const key = decodeURIComponent(counter[2]);
-        if (data == null) cache.delete(key);
-        else { const total = Number(data) || 0; cache.set(key, total); show(key, total); }
+        // An emptied counter collapses to null, which is a shared ZERO.
+        const total = data == null ? 0 : (Number(data) || 0);
+        cache.set(key, total);
+        meter.note(key, total);
         return;
       }
       cache.clear();
-      if (data && typeof data === 'object') {
-        for (const [k, v] of Object.entries(data)) {
-          const total = Number(v) || 0; cache.set(k, total); show(k, total);
-        }
+      if (data == null || typeof data !== 'object') { meter.resetAll(0); return; }
+      for (const [k, v] of Object.entries(data)) {
+        const total = Number(v) || 0;
+        cache.set(k, total);
+        meter.note(k, total);
       }
       return;
     }
     if (name === 'put' && path === '/') {
+      applyCounters(data || {});
       if (await hydrateFrom(data || {})) onChange();
       return;
     }
@@ -709,9 +762,13 @@ const Cloud = (() => {
     if (!configured()) return { enabled: false, synced: false, hadData: false };
     restoreAuth();
 
+    const pulledAt = Date.now();
     const tree = await getJSON(nodeURL());
     let synced = false, hadData = !!tree;
     if (tree) {
+      // The one pull that happens anyway already carries every counter, so the
+      // badges get their real totals without waiting on a per-key read.
+      applyCounters(tree, pulledAt);
       synced = await hydrateFrom(tree);
       lastRaw = tree.content ? fingerprint(tree.content) : lastRaw;
     }
@@ -742,7 +799,7 @@ const Cloud = (() => {
 
   return {
     CONFIG, enabled, init, followDB, bumpLike, readLike, bumpView, readView,
-    authAvailable, authed, signIn, signOut,
+    readCounters, authAvailable, authed, signIn, signOut,
     get status() {
       return { enabled: enabled(), watching: !!source, polling: !!poller,
         disabled, contentBlocked, signedIn: authed() };

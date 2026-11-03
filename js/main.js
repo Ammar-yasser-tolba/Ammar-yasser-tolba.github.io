@@ -47,13 +47,13 @@
      The shared global counter, so every device sees the same number. It is never
      mirrored into browser storage: until the backend answers, the footer says it
      does not know instead of inventing a private figure.
-     Counts.hit() is the dedupe: it increments a key at most once per session,
-     which replaces the old manual `session_active` flag. */
+     Counts.views.hit() is the dedupe: it increments a key at most once per
+     session, which replaces the old manual `session_active` flag. */
   async function trackVisitor() {
     const node = document.getElementById('visitorCount');
     if (!node) return;
-    node.textContent = Counts.cached(Counts.SITE_KEY) ?? '—';
-    const total = await Counts.hit(Counts.SITE_KEY);
+    node.textContent = Counts.views.cached(Counts.SITE_KEY) ?? '—';
+    const total = await Counts.views.hit(Counts.SITE_KEY);
     if (total != null) node.textContent = total;
   }
 

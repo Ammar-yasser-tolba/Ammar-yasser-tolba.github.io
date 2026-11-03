@@ -32,8 +32,18 @@ const render = (() => {
   /* ---- like / view stats (event-delegated, micro DOM updates) ---- */
 
   const itemIndex = new Map();                 // id -> live item object
-  function register(item) { itemIndex.set(item.id, item); }
 
+  // `likes`/`views` on a stored item are a leftover from the versions that kept
+  // counters in IndexedDB. Dropping them here means the object that later gets
+  // saved by an admin edit no longer carries them either.
+  function register(item) {
+    delete item.likes;
+    delete item.views;
+    itemIndex.set(item.id, item);
+  }
+
+  // The heart is this visitor's own state, so it is the only thing that may live
+  // in localStorage. It is a set of item ids, never a count.
   function likedSet() {
     try { return new Set(JSON.parse(localStorage.getItem('liked_cards') || '[]')); }
     catch (e) { return new Set(); }
@@ -44,77 +54,65 @@ const render = (() => {
 
   // One heart + one view counter per card. On cards these float to the corners
   // (see .stat-row CSS); in the detail modal `inline` keeps them in the flow.
-  // The view badge carries `data-ckey`, the GLOBAL counter key, so a shared
-  // total fetched later can patch this node without re-rendering the card.
+  // Both badges carry `data-ckey`, the GLOBAL counter key, so a shared total
+  // arriving later — from a batch read, a click, or another visitor's write —
+  // can patch this node without re-rendering the card.
   function statRow(item, inline) {
     const liked = likedSet().has(item.id);
+    const ckey = Counts.keyFor(item);
     const like = el('button', {
       class: 'like-btn' + (liked ? ' is-liked' : ''), type: 'button',
       'data-id': item.id, 'aria-pressed': String(liked), 'aria-label': I18N.t('like'),
     },
       el('span', { class: 'like-ic' }, liked ? '♥' : '♡'),
-      el('span', { class: 'like-count' }, String(item.likes || 0)),
+      el('span', { class: 'like-count', 'data-ckey': ckey },
+        Counts.likes.label(Counts.likes.cached(ckey))),
     );
-    const ckey = Counts.keyFor(item);
     const views = el('span', {
       class: 'view-stat', 'data-id': item.id, 'data-ckey': ckey, title: I18N.t('views'),
-    }, Counts.label(Counts.cached(ckey)));
+    }, Counts.views.label(Counts.views.cached(ckey)));
     return el('div', { class: 'stat-row' + (inline ? ' is-inline' : '') }, like, views);
   }
 
-  // Updates only the affected widgets — never a full re-render.
-  function paintLike(id, liked, count) {
+  // Updates only the affected widgets — never a full re-render. Two separate
+  // paints on purpose: a shared total arriving from the cloud must not flip
+  // anyone's heart, and a heart click must not invent a number.
+  function paintHeart(id, liked) {
     document.querySelectorAll('.like-btn[data-id="' + id + '"]').forEach(b => {
       b.classList.toggle('is-liked', liked);
       b.setAttribute('aria-pressed', String(liked));
       const ic = b.querySelector('.like-ic'); if (ic) ic.textContent = liked ? '♥' : '♡';
-      const c = b.querySelector('.like-count'); if (c) c.textContent = String(count);
     });
   }
 
+  // The click is answered on the screen before the network is: the shared total
+  // this tab already knows, moved by this one like. Counts.likes then replaces it
+  // with what the backend says — on Firebase that write also travels to every
+  // other visitor, on Abacus an un-like cannot be written and is re-read instead.
   async function toggleLike(id) {
     const item = itemIndex.get(id); if (!item) return;
+    const key = Counts.keyFor(item);
     const set = likedSet();
     const wasLiked = set.has(id);
-    const delta = wasLiked ? -1 : 1;
     if (wasLiked) set.delete(id); else set.add(id);
     saveLiked(set);
+    paintHeart(id, !wasLiked);
 
-    // Paint the heart immediately from the local number, then let the shared
-    // total replace it. Without a configured cloud the local value is the
-    // answer, so the interaction is unchanged.
-    const local = Math.max(0, (item.likes || 0) + delta);
-    item.likes = local;
-    paintLike(id, !wasLiked, local);
-
-    if (Cloud.enabled()) {
-      const shared = await Cloud.bumpLike(Counts.keyFor(item), delta);
-      if (shared != null) { item.likes = shared; paintLike(id, !wasLiked, shared); }
-    }
-    DB.put(item);                    // cached for the next offline load
-  }
-
-  // Shared like totals on load, mirroring how the view badges are warmed.
-  async function warmLikes(items) {
-    if (!Cloud.enabled()) return;
-    await Promise.all((items || []).map(async item => {
-      const total = await Cloud.readLike(Counts.keyFor(item));
-      if (total == null) return;
-      item.likes = total;
-      paintLike(item.id, likedSet().has(item.id), total);
-    }));
+    const known = Counts.likes.cached(key);
+    if (known != null) Counts.likes.paint(key, Math.max(0, known + (wasLiked ? -1 : 1)));
+    Counts.likes.toggle(key, wasLiked ? -1 : 1);
   }
 
   // Opening a card sends one increment to the shared backend and repaints the
   // badge from its answer. Nothing about a view is kept in this browser: no
   // IndexedDB write, no local running total, so what a visitor sees is the
-  // number every other visitor sees. Counts.hit() dedupes per session.
+  // number every other visitor sees. Counts.views.hit() dedupes per session.
   function bumpView(item) {
     if (!item) return;
     const key = Counts.keyFor(item);
-    const known = Counts.cached(key);
-    if (known != null) Counts.paint(key, known + 1);   // optimistic, global-based
-    Counts.hitAndPaint(key);                           // authoritative global value
+    const known = Counts.views.cached(key);
+    if (known != null) Counts.views.paint(key, known + 1);   // optimistic, global-based
+    Counts.views.hitAndPaint(key);                           // authoritative global value
   }
 
   // A single delegated listener serves every card and survives all re-renders.
@@ -844,11 +842,10 @@ const render = (() => {
       services(), experience(), education(), contacts(),
     ]);
     await chrome(); // after content exists so custom sections can attach cleanly
-    // Fire-and-forget: badges already show the local number and are patched by
-    // each reply as it lands, so a slow service cannot delay the page.
-    const living = [...itemIndex.values()];
-    Counts.warm(living);
-    warmLikes(living);
+    // Fire-and-forget: badges already show the last shared total (or the
+    // placeholder) and are patched as each reply lands, so a slow service cannot
+    // delay the page. Views and likes are both warmed by this one call.
+    Counts.warm([...itemIndex.values()]);
   }
 
   return {
