@@ -144,7 +144,10 @@ button,.btn{font:inherit;font-size:15px;cursor:pointer;border:1px solid var(--bd
 .pj-card:hover{transform:translateY(-6px);border-color:var(--ac);box-shadow:var(--shadow)}
 .pj-media{position:relative;aspect-ratio:3/4;overflow:hidden;
   background:radial-gradient(120% 120% at 50% 0%,#141d30,#0a1120);border-bottom:1px solid var(--bd)}
-.pj-cover{width:100%;height:100%;object-fit:contain;padding:8px;transition:transform .5s ease}
+/* Edge-to-edge cover: fills the 3/4 box with no padding and no dark letterbox
+   gaps. The container aspect-ratio reserves the space, so lazy loading causes
+   zero layout shift. */
+.pj-cover{width:100%;height:100%;object-fit:cover;padding:0;transition:transform .5s ease}
 .pj-card:hover .pj-cover{transform:none}
 .pj-count{position:absolute;bottom:10px;inset-inline-end:10px;font-size:12px;padding:2px 8px;border-radius:999px;
   background:color-mix(in srgb,#000 45%,transparent);color:#fff;backdrop-filter:blur(4px)}
@@ -259,12 +262,13 @@ footer{padding:28px 0;text-align:center;color:var(--mu);border-top:1px solid var
 
 /* ---------- 12. detail views ---------- */
 .detail{display:flex;flex-direction:column;gap:16px}
-.d-cover img{width:100%;max-height:60vh;object-fit:contain;border-radius:16px;background:var(--bg)}
+/* aspect-ratio reserves the box before the (lazy) bytes arrive -> no jump */
+.d-cover img{width:100%;aspect-ratio:16/9;max-height:60vh;object-fit:contain;border-radius:16px;background:var(--bg)}
 .d-cover .noimg{max-height:40vh}
 .d-title{font-size:24px;margin:6px 0 2px}
 .d-desc{font-size:16px;line-height:1.75;margin:0}
 .d-gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
-.d-gallery img{aspect-ratio:9/16;object-fit:cover;border-radius:12px;border:1px solid var(--bd);
+.d-gallery img{width:100%;height:auto;aspect-ratio:9/16;object-fit:cover;border-radius:12px;border:1px solid var(--bd);
   transition:transform .3s,box-shadow .3s;cursor:zoom-in}
 .d-gallery img:hover{transform:translateY(-4px) scale(1.02);box-shadow:var(--shadow)}
 .d-actions{border-top:1px solid var(--bd);padding-top:18px;margin-top:6px}
@@ -454,9 +458,9 @@ body.admin .nav-item:focus-within .nav-mv{display:inline-flex}
 .sec-body.sb-text{grid-template-columns:1fr;gap:18px}
 .c.cc-list{display:flex;gap:16px;align-items:flex-start}
 .c.cc-list .ic{flex:none}
-.cc-media{margin-bottom:14px;border-radius:14px;overflow:hidden;
+.cc-media{margin-bottom:14px;border-radius:14px;overflow:hidden;aspect-ratio:16/10;
   background:color-mix(in srgb,var(--ac) 8%,var(--sf))}
-.cc-media img{width:100%;height:auto;max-height:340px;object-fit:contain;display:block}
+.cc-media img{width:100%;height:100%;object-fit:cover;display:block}
 .c[role=button]{cursor:pointer}
 .c[role=button]:focus-visible{outline:2px solid var(--ac);outline-offset:3px}
 

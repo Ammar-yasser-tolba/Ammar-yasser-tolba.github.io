@@ -44,6 +44,8 @@ const render = (() => {
 
   // One heart + one view counter per card. On cards these float to the corners
   // (see .stat-row CSS); in the detail modal `inline` keeps them in the flow.
+  // The view badge carries `data-ckey`, the GLOBAL counter key, so a shared
+  // total fetched later can patch this node without re-rendering the card.
   function statRow(item, inline) {
     const liked = likedSet().has(item.id);
     const like = el('button', {
@@ -53,8 +55,11 @@ const render = (() => {
       el('span', { class: 'like-ic' }, liked ? '♥' : '♡'),
       el('span', { class: 'like-count' }, String(item.likes || 0)),
     );
-    const views = el('span', { class: 'view-stat', 'data-id': item.id, title: I18N.t('views') },
-      '👁 ' + String(item.views || 0));
+    const ckey = Counts.keyFor(item);
+    const shared = Counts.cached(ckey);
+    const views = el('span', {
+      class: 'view-stat', 'data-id': item.id, 'data-ckey': ckey, title: I18N.t('views'),
+    }, '👁 ' + String(shared != null ? shared : (item.views || 0)));
     return el('div', { class: 'stat-row' + (inline ? ' is-inline' : '') }, like, views);
   }
 
@@ -81,12 +86,23 @@ const render = (() => {
     DB.put(item);                              // persist the aggregate
   }
 
+  // Opens a card -> the shared global total goes up for every visitor.
+  // The local `item.views` is still kept as the offline/file:// fallback, and
+  // the badge is painted optimistically so the click always feels acknowledged.
   function bumpView(item) {
     if (!item) return;
     item.views = (item.views || 0) + 1;
-    const v = item.views;
-    document.querySelectorAll('.view-stat[data-id="' + item.id + '"]').forEach(s => { s.textContent = '👁 ' + v; });
+    const key = Counts.keyFor(item);
+    const known = Counts.cached(key);
+    if (known != null) {
+      Counts.paint(key, known + 1);                 // optimistic, global-based
+    } else {
+      const v = item.views;
+      document.querySelectorAll('.view-stat[data-id="' + item.id + '"]')
+        .forEach(s => { s.textContent = '👁 ' + v; });
+    }
     DB.put(item);
+    Counts.hitAndPaint(key);                        // authoritative global value
   }
 
   // A single delegated listener serves every card and survives all re-renders.
@@ -193,7 +209,7 @@ const render = (() => {
     const mediaRef = item.cover || item.img || item.media;
     if (mediaRef) {
       const u = await DB.resolveImg(mediaRef);
-      if (u) body.append(el('div', { class: 'd-cover' }, el('img', { src: u, alt: I18N.pick(item.title) })));
+      if (u) body.append(el('div', { class: 'd-cover' }, el('img', { src: u, alt: I18N.pick(item.title), loading: 'lazy', decoding: 'async' })));
     }
     body.append(el('h2', { class: 'd-title' }, I18N.pick(item.title)));
     const company = [I18N.pick(item.company), I18N.pick(item.dates)].filter(Boolean).join(' · ');
@@ -216,7 +232,7 @@ const render = (() => {
     if (item.desc && (item.desc.en || item.desc.ar)) card.append(el('p', {}, I18N.pick(item.desc)));
     if (layout === 'text' && item.media) {
       const url = await DB.resolveImg(item.media);
-      if (url) card.prepend(el('div', { class: 'cc-media' }, el('img', { src: url, alt: I18N.pick(item.title) })));
+      if (url) card.prepend(el('div', { class: 'cc-media' }, el('img', { src: url, alt: I18N.pick(item.title), loading: 'lazy', decoding: 'async' })));
     }
     card.append(statRow(item));
     bindCardOpen(card, item);
@@ -376,7 +392,7 @@ const render = (() => {
 
       // --- media (cover with in-card switcher) ---
       let idx = 0;
-      const cover = el('img', { class: 'pj-cover', src: urls[0] || '', alt: I18N.pick(item.title) });
+      const cover = el('img', { class: 'pj-cover', src: urls[0] || '', alt: I18N.pick(item.title), loading: 'lazy', decoding: 'async' });
       if (!urls.length) cover.remove();
       const counter = el('span', { class: 'pj-count' }, urls.length ? `1/${urls.length}` : '');
       const media = el('div', { class: 'pj-media' }, urls.length ? cover : noImage(I18N.pick(item.title)), counter);
@@ -431,7 +447,7 @@ const render = (() => {
     // 1) top cover
     body.append(
       urls.length
-        ? el('div', { class: 'd-cover' }, el('img', { src: urls[0], alt: I18N.pick(item.title) }))
+        ? el('div', { class: 'd-cover' }, el('img', { src: urls[0], alt: I18N.pick(item.title), loading: 'lazy', decoding: 'async' }))
         : el('div', { class: 'd-cover' }, noImage(I18N.pick(item.title)))
     );
 
@@ -439,7 +455,7 @@ const render = (() => {
     const gallery = urls.slice(1);
     if (gallery.length) {
       body.append(el('div', { class: 'd-gallery' },
-        ...gallery.map((u, i) => el('img', { src: u, alt: `${I18N.pick(item.title)} ${i + 2}`, loading: 'lazy' }))));
+        ...gallery.map((u, i) => el('img', { src: u, alt: `${I18N.pick(item.title)} ${i + 2}`, loading: 'lazy', decoding: 'async' }))));
     }
 
     // 3) full description
@@ -598,7 +614,7 @@ const render = (() => {
       register(item);
       const coverUrl = await DB.resolveImg(item.cover);
       const media = el('div', { class: 'cert-media' },
-        coverUrl ? el('img', { src: coverUrl, alt: I18N.pick(item.title) }) : noImage(I18N.pick(item.title)),
+        coverUrl ? el('img', { src: coverUrl, alt: I18N.pick(item.title), loading: 'lazy', decoding: 'async' }) : noImage(I18N.pick(item.title)),
         el('span', { class: 'cert-badge' }, '🏅'),
       );
       const body = el('div', { class: 'cert-body' },
@@ -625,14 +641,14 @@ const render = (() => {
     const extraUrls = await DB.resolveAll(item.attachments || []);
 
     const body = el('div', { class: 'detail cert-detail' },
-      coverUrl ? el('div', { class: 'd-cover' }, el('img', { src: coverUrl, alt: I18N.pick(item.title) }))
+      coverUrl ? el('div', { class: 'd-cover' }, el('img', { src: coverUrl, alt: I18N.pick(item.title), loading: 'lazy', decoding: 'async' }))
                : el('div', { class: 'd-cover' }, noImage(I18N.pick(item.title))),
       el('h2', { class: 'd-title' }, I18N.pick(item.title)),
       el('p', { class: 'd-desc' }, I18N.pick(item.desc)),
     );
     if (extraUrls.length) {
       body.append(el('div', { class: 'd-gallery' },
-        ...extraUrls.map((u, i) => el('img', { src: u, alt: `Attachment ${i + 1}`, loading: 'lazy' }))));
+        ...extraUrls.map((u, i) => el('img', { src: u, alt: `Attachment ${i + 1}`, loading: 'lazy', decoding: 'async' }))));
     }
     body.prepend(backBtn());
     UI.Modal.open({ title: '', body, size: 'wide' });
@@ -816,6 +832,9 @@ const render = (() => {
       services(), experience(), education(), contacts(),
     ]);
     await chrome(); // after content exists so custom sections can attach cleanly
+    // Fire-and-forget: badges already show the local number and are patched by
+    // each reply as it lands, so a slow service cannot delay the page.
+    Counts.warm([...itemIndex.values()]);
   }
 
   return {

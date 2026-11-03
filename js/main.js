@@ -43,20 +43,20 @@
   document.querySelectorAll('#about p, .c, section h2, .home-wrap > *')
     .forEach(el => el.setAttribute('data-reveal', ''));
 
-  /* ---- total visitor count (once per browser session) ---- */
+  /* ---- total visitor count ----
+     The shared global counter, so every device sees the same number. The last
+     value we received is mirrored into IndexedDB and used as the instant paint
+     (and as the fallback when offline or on file://).
+     Counts.hit() is the dedupe: it increments a key at most once per session,
+     which replaces the old manual `session_active` flag. */
   async function trackVisitor() {
-    let total = Number(await DB.getMeta('visitors')) || 0;
-    let active = false;
-    try {
-      active = sessionStorage.getItem('session_active') === '1';
-      if (!active) {
-        total += 1;
-        await DB.setMeta('visitors', total);
-        sessionStorage.setItem('session_active', '1');
-      }
-    } catch (e) { /* private mode: sessionStorage may throw, counts still render */ }
     const node = document.getElementById('visitorCount');
-    if (node) node.textContent = total;
+    if (!node) return;
+    node.textContent = Counts.cached(Counts.SITE_KEY) ?? (Number(await DB.getMeta('visitors')) || 0);
+    const total = await Counts.hit(Counts.SITE_KEY);
+    if (total == null) return;                    // service unreachable -> local stands
+    node.textContent = total;
+    try { await DB.setMeta('visitors', total); } catch (e) {}
   }
 
   /* ---- boot ---- */

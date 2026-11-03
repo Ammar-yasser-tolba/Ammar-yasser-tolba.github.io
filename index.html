@@ -7,7 +7,11 @@
 <meta name="description" content="Flutter Developer building responsive, user-friendly mobile apps with clean code.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='%2338e0ff'/><stop offset='0.5' stop-color='%232f7dff'/><stop offset='1' stop-color='%237b4dff'/></linearGradient></defs><rect width='64' height='64' rx='16' fill='url(%23g)'/><path d='M37 14 L21 30 L28.5 37.5 L51 15 Z' fill='%23fff'/><path d='M21 34 L28.5 41.5 L37 41.5 L28.5 33 Z' fill='%23eaf5ff'/><path d='M31 33 L39.5 33 L48 41.5 L39.5 49 Z' fill='%23bfe1ff' fill-opacity='.6'/></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&family=Sora:wght@400;600;700&display=swap" rel="stylesheet">
+<!-- Global counters: warm the DNS/TLS handshake so the first read is not delayed -->
+<link rel="preconnect" href="https://abacus.jasoncameron.dev">
+<link rel="dns-prefetch" href="https://abacus.jasoncameron.dev">
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -39,7 +43,7 @@
           <path d="M31 33 L39.5 33 L48 41.5 L39.5 49 Z" fill="#bfe1ff" opacity="0.6"/>
           <rect x="2.75" y="2.75" width="58.5" height="58.5" rx="16.25" fill="none" stroke="#ffffff" stroke-opacity="0.28" stroke-width="1.5"/>
         </svg>
-        <img id="logoImg" class="logo-img" alt="Logo" hidden>
+        <img id="logoImg" class="logo-img" alt="Logo" loading="lazy" decoding="async" hidden>
       </span>
       <span class="logo-text" id="brandText">
         <span class="logo-name" id="brandName">Ammar</span>
@@ -91,7 +95,9 @@
       </div>
     </div>
     <div class="me-wrap">
-      <img class="me" id="hero-img" src="images/profile.jpg" alt="Ammar Yasser Tolba" onerror="this.style.display='none'">
+      <!-- LCP element: eager + high priority. lazy-loading the hero would delay
+           the first paint, which is the opposite of the goal here. -->
+      <img class="me" id="hero-img" src="images/profile.jpg" alt="Ammar Yasser Tolba" loading="eager" fetchpriority="high" decoding="async" onerror="this.style.display='none'">
     </div>
   </div>
 </section>
@@ -139,7 +145,7 @@
   </div>
   <div id="projects-grid" class="pj-grid">
     <article class="pj-card">
-      <div class="pj-media"><img class="pj-cover" src="images/healthcare/login.jpg" alt="Healthcare App" onerror="this.remove()"></div>
+      <div class="pj-media"><img class="pj-cover" src="images/healthcare/login.jpg" alt="Healthcare App" loading="lazy" decoding="async" onerror="this.remove()"></div>
       <div class="pj-body">
         <h3 class="pj-title" data-ar="تطبيق رعاية صحية">Healthcare App</h3>
         <p class="pj-excerpt" data-ar="تطبيق Flutter للرعاية الصحية فيه مسارين للمريض والطبيب: حجز المواعيد، وملفات الأطباء، والجداول، وواجهة الدفع.">A Flutter healthcare app with patient and doctor flows: appointment booking, doctor profiles, schedules and payment UI.</p>
@@ -147,7 +153,7 @@
       </div>
     </article>
     <article class="pj-card">
-      <div class="pj-media"><img class="pj-cover" src="images/fashion/home.jpg" alt="Fashion Shopping App" onerror="this.remove()"></div>
+      <div class="pj-media"><img class="pj-cover" src="images/fashion/home.jpg" alt="Fashion Shopping App" loading="lazy" decoding="async" onerror="this.remove()"></div>
       <div class="pj-body">
         <h3 class="pj-title" data-ar="تطبيق تسوق للأزياء">Fashion Shopping App</h3>
         <p class="pj-excerpt" data-ar="تطبيق تسوق بـ Flutter لتصفح الملابس وعرض التفاصيل وتغيير الكميات مع حساب السعر الإجمالي لحظيًا.">A Flutter shopping app for browsing clothing, viewing details and changing quantities with a live total price.</p>
@@ -163,7 +169,7 @@
       </div>
     </article>
     <article class="pj-card">
-      <div class="pj-media"><img class="pj-cover" src="images/domino.png" alt="Domino Games" onerror="this.remove()"></div>
+      <div class="pj-media"><img class="pj-cover" src="images/domino.png" alt="Domino Games" loading="lazy" decoding="async" onerror="this.remove()"></div>
       <div class="pj-body">
         <h3 class="pj-title" data-ar="ألعاب الدومينو">Domino Games</h3>
         <p class="pj-excerpt" data-ar="ألعاب دومينو بـ Python تطبق القواعد والقرارات المنطقية والبرمجة كائنية التوجه.">Python domino games applying game rules, logical decisions and object-oriented programming.</p>
@@ -252,10 +258,11 @@
   <div class="foot-stats"><span class="foot-views">👁 <span id="visitorCount">0</span> <span data-ar="زائرًا">visitors</span></span></div>
 </footer>
 
-<!-- Scripts in dependency order: storage -> i18n -> primitives -> views -> admin -> bootstrap -->
+<!-- Scripts in dependency order: storage -> i18n -> primitives -> counters -> views -> admin -> bootstrap -->
 <script src="js/db.js"></script>
 <script src="js/i18n.js"></script>
 <script src="js/ui.js"></script>
+<script src="js/counts.js"></script>
 <script src="js/render.js"></script>
 <script src="js/admin.js"></script>
 <script src="js/main.js"></script>
