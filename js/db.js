@@ -79,6 +79,17 @@ const DB = (() => {
     return (a.order == null ? Infinity : a.order) - (b.order == null ? Infinity : b.order);
   }
 
+  /* ---- write notifications ----
+     cloud.js subscribes to mirror changes into the shared database. Emitted
+     after the local write succeeds so a failed put never triggers a push. */
+  const writers = [];
+  function emit(kind, detail) {
+    for (const fn of writers) { try { fn(kind, detail); } catch (e) {} }
+  }
+  function onWrite(fn) {
+    if (typeof fn === 'function') writers.push(fn);
+  }
+
   async function getAll(type) {
     const items = useMemory
       ? [...memItems.values()].filter(i => i.type === type)
@@ -87,8 +98,9 @@ const DB = (() => {
   }
 
   async function put(item) {
-    if (useMemory) { memItems.set(item.id, item); return; }
+    if (useMemory) { memItems.set(item.id, item); emit('item', { item }); return; }
     await tx('items', 'readwrite', s => s.put(item));
+    emit('item', { item });
   }
 
   async function del(id) {
@@ -101,13 +113,15 @@ const DB = (() => {
         .filter(r => r && r.key);
       for (const r of refs) await delImage(r.key);
     }
-    if (useMemory) { memItems.delete(id); return; }
+    if (useMemory) { memItems.delete(id); emit('remove', { id, item, type: item && item.type }); return; }
     await tx('items', 'readwrite', s => s.delete(id));
+    emit('remove', { id, item, type: item && item.type });
   }
 
   async function putImage(key, blob) {
-    if (useMemory) { memImages.set(key, blob); return; }
+    if (useMemory) { memImages.set(key, blob); emit('image', { key, removed: false }); return; }
     await tx('images', 'readwrite', s => s.put({ key, blob }));
+    emit('image', { key, removed: false });
   }
 
   async function getImage(key) {
@@ -118,8 +132,9 @@ const DB = (() => {
 
   async function delImage(key) {
     urlCache.delete(key);
-    if (useMemory) { memImages.delete(key); return; }
+    if (useMemory) { memImages.delete(key); emit('image', { key, removed: true }); return; }
     await tx('images', 'readwrite', s => s.delete(key));
+    emit('image', { key, removed: true });
   }
 
   /**
@@ -429,7 +444,7 @@ const DB = (() => {
     init, getAll, put, del,
     putImage, getImage, delImage,
     resolveImg, resolveAll,
-    uid, getMeta, setMeta,
+    uid, getMeta, setMeta, onWrite,
     get isMemoryMode() { return useMemory; },
   };
 })();

@@ -77,13 +77,33 @@ const render = (() => {
     const item = itemIndex.get(id); if (!item) return;
     const set = likedSet();
     const wasLiked = set.has(id);
-    let base = item.likes || 0;
-    if (wasLiked) { set.delete(id); base = Math.max(0, base - 1); }
-    else { set.add(id); base += 1; }
+    const delta = wasLiked ? -1 : 1;
+    if (wasLiked) set.delete(id); else set.add(id);
     saveLiked(set);
-    item.likes = base;
-    paintLike(id, !wasLiked, base);
-    DB.put(item);                              // persist the aggregate
+
+    // Paint the heart immediately from the local number, then let the shared
+    // total replace it. Without a configured cloud the local value is the
+    // answer, so the interaction is unchanged.
+    const local = Math.max(0, (item.likes || 0) + delta);
+    item.likes = local;
+    paintLike(id, !wasLiked, local);
+
+    if (Cloud.enabled()) {
+      const shared = await Cloud.bumpLike(Counts.keyFor(item), delta);
+      if (shared != null) { item.likes = shared; paintLike(id, !wasLiked, shared); }
+    }
+    DB.put(item);                    // cached for the next offline load
+  }
+
+  // Shared like totals on load, mirroring how the view badges are warmed.
+  async function warmLikes(items) {
+    if (!Cloud.enabled()) return;
+    await Promise.all((items || []).map(async item => {
+      const total = await Cloud.readLike(Counts.keyFor(item));
+      if (total == null) return;
+      item.likes = total;
+      paintLike(item.id, likedSet().has(item.id), total);
+    }));
   }
 
   // Opens a card -> the shared global total goes up for every visitor.
@@ -834,7 +854,9 @@ const render = (() => {
     await chrome(); // after content exists so custom sections can attach cleanly
     // Fire-and-forget: badges already show the local number and are patched by
     // each reply as it lands, so a slow service cannot delay the page.
-    Counts.warm([...itemIndex.values()]);
+    const living = [...itemIndex.values()];
+    Counts.warm(living);
+    warmLikes(living);
   }
 
   return {

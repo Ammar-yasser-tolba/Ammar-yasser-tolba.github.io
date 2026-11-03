@@ -60,6 +60,15 @@
   }
 
   /* ---- boot ---- */
+
+  // Remote changes arrive over the stream in bursts (an admin edit touches
+  // several records). One re-render per burst, not per event.
+  let rerenderTimer = null;
+  function rerenderSoon() {
+    clearTimeout(rerenderTimer);
+    rerenderTimer = setTimeout(() => render.all(), 300);
+  }
+
   async function boot() {
     // restore persisted preferences first (no flash of wrong theme/language)
     let theme = 'dark', lang = 'en';
@@ -71,11 +80,24 @@
     const { memoryMode } = await DB.init();
     if (memoryMode) UI.toast('Storage limited: uploads may not persist.', 'err');
 
-    // first paint of the dynamic sections + reveal the static ones
+    // First paint comes from the local cache, never from the network, so the
+    // page is instant and still renders with no connection at all.
     await render.all();
     observeSections();
     UI.observeReveal(document);
     await trackVisitor();
+
+    // then adopt the shared cloud copy and keep it live. followDB() turns every
+    // local write (admin edits, visitor feedback) into a cloud write, so no
+    // individual call site needed changing. Inert when CONFIG.databaseURL is ''.
+    try {
+      Cloud.followDB();
+      const cloud = await Cloud.init(rerenderSoon);
+      if (cloud.synced) { render.all().then(observeSections); }
+      if (cloud.enabled && !cloud.hadData) console.info('[cloud] published local content as the first cloud doc');
+    } catch (e) {
+      console.warn('[cloud] sync failed; continuing from local data', e);
+    }
 
     // now that the DB is open and painted, re-render dynamic sections on lang change
     I18N.setOnChange(() => render.all());
