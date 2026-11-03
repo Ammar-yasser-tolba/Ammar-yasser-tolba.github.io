@@ -1,62 +1,508 @@
-:root{--bg:#f4f6fb;--sf:#fff;--tx:#0f1b2d;--mu:#55627a;--ac:#0b63ce;--bd:#dbe2f0}
-[data-theme=dark]{--bg:#0b1220;--sf:#121c31;--tx:#e8eefc;--mu:#9aa8c4;--ac:#4cc3ff;--bd:#223250}
+/* ============================================================================
+ * style.css — Ammar Yasser Tolba portfolio
+ * Sections: 1 tokens  2 base  3 header/nav  4 hero/about  5 shared bits
+ *           6 skills  7 projects (portrait cards)  8 certificates  9 services
+ *          10 contact/footer  11 modal system  12 detail views
+ *          13 feedback/reviews  14 inquiry  15 admin/upload forms
+ *          16 notifications/moderation  17 reveal + responsive + a11y
+ * ==========================================================================*/
+
+/* ---------- 1. design tokens ---------- */
+:root{
+  --bg:#eef2fb; --sf:#ffffff; --tx:#0c1730; --mu:#55627a; --ac:#0b63ce; --ac2:#7c5cff; --ac3:#00c2ff;
+  --bd:#d9e2f2; --glass:color-mix(in srgb,var(--sf) 72%,transparent);
+  --grad:linear-gradient(120deg,var(--ac3),var(--ac) 46%,var(--ac2));
+  --grad-soft:linear-gradient(135deg,color-mix(in srgb,var(--ac3) 18%,var(--sf)),color-mix(in srgb,var(--ac2) 16%,var(--sf)));
+  --glow:0 10px 34px color-mix(in srgb,var(--ac) 30%,transparent);
+  --shadow:0 16px 46px rgba(12,24,54,.16); --shadow-sm:0 8px 22px rgba(12,24,54,.10);
+  --ring:0 0 0 3px color-mix(in srgb,var(--ac) 30%,transparent);
+  --ok:#16a34a; --danger:#e5484d; --star:#f5b301; --radius:20px;
+}
+[data-theme=dark]{
+  --bg:#070d1a; --sf:#111a2e; --tx:#eaf1ff; --mu:#93a3c4; --ac:#4cc3ff; --ac2:#a78bff; --ac3:#35e6ff;
+  --bd:#223250; --glass:color-mix(in srgb,var(--sf) 64%,transparent);
+  --grad:linear-gradient(120deg,var(--ac3),var(--ac) 46%,var(--ac2));
+  --grad-soft:linear-gradient(135deg,color-mix(in srgb,var(--ac3) 14%,var(--sf)),color-mix(in srgb,var(--ac2) 14%,var(--sf)));
+  --glow:0 14px 44px color-mix(in srgb,var(--ac) 26%,transparent);
+  --shadow:0 20px 52px rgba(0,0,0,.55); --shadow-sm:0 10px 28px rgba(0,0,0,.42);
+}
+
+/* ---------- 2. base ---------- */
 *{box-sizing:border-box;margin:0}
-html{scroll-behavior:smooth;scroll-padding-top:72px}
-body{font:16px/1.7 'Sora','Cairo',sans-serif;background:var(--bg);color:var(--tx)}
+html{scroll-behavior:smooth;scroll-padding-top:96px;background:var(--bg)}
+body{font:16px/1.7 'Sora','Cairo',sans-serif;background:transparent;color:var(--tx);
+  transition:background .4s ease,color .4s ease;min-height:100vh}
+/* animated aurora glow fixed behind all content (transform-only for GPU) */
+body::before{content:"";position:fixed;inset:-12%;z-index:-1;pointer-events:none;will-change:transform;
+  background:
+    radial-gradient(45% 42% at 12% 6%,color-mix(in srgb,var(--ac3) 24%,transparent),transparent 60%),
+    radial-gradient(42% 40% at 90% 12%,color-mix(in srgb,var(--ac2) 22%,transparent),transparent 62%),
+    radial-gradient(58% 52% at 50% 104%,color-mix(in srgb,var(--ac) 18%,transparent),transparent 60%);
+  animation:aurora 24s ease-in-out infinite alternate}
+@keyframes aurora{to{transform:scale(1.06) translate3d(0,-1%,0)}}
 [dir=rtl] body{font-family:'Cairo','Sora',sans-serif}
+body.no-scroll{overflow:hidden}
+img{display:block;max-width:100%}
 a{color:inherit;text-decoration:none}
-:focus-visible{outline:3px solid var(--ac);outline-offset:3px}
+:focus-visible{outline:3px solid var(--ac);outline-offset:3px;border-radius:8px}
 .w{max-width:1040px;margin:auto;padding:0 20px}
+section{padding:72px 0}
+h2{font-size:clamp(24px,4vw,30px);margin-bottom:26px}
+h3{font-size:19px;margin-bottom:6px}
+p{color:var(--mu);margin-bottom:12px}
+.empty{color:var(--mu);font-style:italic;padding:8px 0}
+
+/* ---------- 3. header / nav ---------- */
 header{position:fixed;top:12px;inset-inline:0;z-index:9;pointer-events:none}
-header .w{position:relative;pointer-events:auto;display:flex;align-items:center;gap:10px;max-width:940px;padding:8px 12px;background:color-mix(in srgb,var(--sf) 80%,transparent);backdrop-filter:blur(14px);border:1px solid var(--bd);border-radius:999px;box-shadow:0 8px 30px rgba(0,0,0,.18)}
-.logo{display:flex}
-.mark{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;background:linear-gradient(135deg,var(--ac),#7c5cff);color:#fff;font-weight:700;font-size:15px;letter-spacing:.5px}
+header .w{position:relative;pointer-events:auto;display:flex;align-items:center;gap:10px;max-width:940px;
+  padding:8px 14px;background:var(--glass);backdrop-filter:blur(20px) saturate(150%);
+  border:1px solid color-mix(in srgb,var(--bd) 80%,transparent);border-radius:999px;
+  box-shadow:var(--shadow-sm),inset 0 1px 0 color-mix(in srgb,var(--sf) 60%,transparent)}
+.logo{display:flex;align-items:center;gap:10px}
+.logo-mark{width:40px;height:40px;flex:none;display:block;
+  position:relative;overflow:hidden;border-radius:11px;
+  filter:drop-shadow(0 4px 12px color-mix(in srgb,var(--ac2) 42%,transparent));
+  transition:transform .4s cubic-bezier(.2,.8,.2,1),filter .4s ease}
+.logo-mark .logo-svg,.logo-mark .logo-img{width:100%;height:100%;display:block;object-fit:contain}
+.logo:hover .logo-mark{transform:translateY(-2px) scale(1.06);
+  animation:logoPulse 1.7s ease-in-out infinite}
+@keyframes logoPulse{
+  0%,100%{filter:drop-shadow(0 0 10px color-mix(in srgb,var(--ac3) 55%,transparent)) drop-shadow(0 6px 16px color-mix(in srgb,var(--ac2) 50%,transparent))}
+  50%{filter:drop-shadow(0 0 22px color-mix(in srgb,var(--ac3) 85%,transparent)) drop-shadow(0 8px 20px color-mix(in srgb,var(--ac2) 65%,transparent))}}
+.logo-text{display:flex;flex-direction:column;line-height:1.05}
+.logo-name{font-weight:700;font-size:17px;letter-spacing:.2px;
+  background:var(--grad);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.logo-sub{font-size:10.5px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--mu)}
 nav{flex:1;display:flex;justify-content:center;gap:2px;font-size:14px}
-nav a{padding:8px 13px;border-radius:999px;color:var(--mu);transition:background .25s,color .25s}
-nav a:hover{color:var(--tx)}
-nav a.on{background:var(--ac);color:var(--bg);font-weight:600}
+nav a{padding:8px 13px;border-radius:999px;color:var(--mu);transition:background .25s,color .25s,transform .2s}
+nav a:hover{color:var(--tx);transform:translateY(-1px)}
+nav a.on{background:var(--grad);color:#fff;font-weight:600;box-shadow:var(--glow)}
 .tools{margin-inline-start:auto;display:flex;gap:6px}
 .tools button{padding:8px 14px}
 #menuBtn{display:none}
-button,.btn{font:inherit;font-size:15px;cursor:pointer;border:1px solid var(--bd);background:var(--sf);color:var(--tx);border-radius:999px;padding:8px 18px;display:inline-block}
-.btn.p{background:var(--ac);border-color:var(--ac);color:var(--bg);font-weight:600}
-section{padding:72px 0}
-h2{font-size:28px;margin-bottom:28px}
-h3{font-size:19px;margin-bottom:6px}
-p{color:var(--mu);margin-bottom:12px}
-.hero{display:grid;grid-template-columns:1.3fr .7fr;gap:40px;align-items:center;padding:64px 0}
+
+/* ---------- 4. hero / about ---------- */
+.hero{display:grid;grid-template-columns:1.3fr .7fr;gap:40px;align-items:center;padding:120px 0 64px;position:relative}
+.hero::before{content:"";position:absolute;width:380px;height:380px;border-radius:50%;inset-inline-end:-30px;top:70px;
+  z-index:-1;background:radial-gradient(circle,color-mix(in srgb,var(--ac) 32%,transparent),transparent 65%);
+  animation:pulse 7s ease-in-out infinite}
 .hero>*{animation:up .7s both}.hero>:last-child{animation-delay:.15s}
 @keyframes up{from{opacity:0;transform:translateY(16px)}}
-.tag{display:inline-block;border:1px solid var(--bd);background:var(--sf);border-radius:999px;padding:4px 14px;font-size:14px;color:var(--mu);margin-bottom:18px}
-h1{font-size:clamp(34px,6vw,56px);line-height:1.15;margin-bottom:10px}
-.role{font-size:19px;color:var(--ac);font-weight:600;margin-bottom:14px}
-.hero .btn{margin-inline-end:10px;margin-top:8px}
-.me{width:100%;max-width:250px;aspect-ratio:9/16;object-fit:cover;border:6px solid var(--tx);border-radius:34px;justify-self:center}
-.g{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:16px}
-.c{background:var(--sf);border:1px solid var(--bd);border-radius:16px;padding:22px}
-.t{display:inline-block;padding:2px 12px;margin:3px;border:1px solid var(--bd);border-radius:999px;font-size:14px;color:var(--mu)}
-.pj{background:var(--sf);border:1px solid var(--bd);border-radius:20px;padding:26px;margin-bottom:24px}
-.ph{display:flex;gap:14px;overflow-x:auto;padding:14px 0 18px}
-.ph img{height:300px;width:auto;flex:none;border:5px solid var(--tx);border-radius:26px}
-.l a{display:inline-block;margin:0 10px 10px 0;padding:10px 18px;border:1px solid var(--bd);border-radius:12px;background:var(--sf)}
-[dir=rtl] .l a{margin:0 0 10px 10px}
-.l a:hover{border-color:var(--ac);color:var(--ac)}
-footer{padding:28px 0;text-align:center;color:var(--mu);border-top:1px solid var(--bd);font-size:14px}
-@media(prefers-reduced-motion:reduce){*{animation:none!important;scroll-behavior:auto}}
-html{scroll-padding-top:96px}
-.hero{padding-top:120px;position:relative}
-.hero::before{content:"";position:absolute;width:380px;height:380px;border-radius:50%;inset-inline-end:-30px;top:70px;z-index:-1;background:radial-gradient(circle,color-mix(in srgb,var(--ac) 32%,transparent),transparent 65%);animation:pulse 7s ease-in-out infinite}
-.me{animation:up .7s both,float 6s ease-in-out .9s infinite}
-@keyframes float{50%{transform:translateY(-14px)}}
 @keyframes pulse{50%{transform:scale(1.15);opacity:.7}}
-.rv{opacity:0;transform:translateY(28px);transition:opacity .7s ease,transform .7s ease}
-.rv.in{opacity:1;transform:none}
-.c,.pj{transition:transform .3s,border-color .3s,box-shadow .3s}
-.c:hover,.pj:hover{transform:translateY(-4px);border-color:var(--ac);box-shadow:0 14px 30px rgba(0,0,0,.16)}
-.ph img{transition:transform .3s}
-.ph img:hover{transform:translateY(-6px) scale(1.03)}
-.btn,button{transition:transform .2s,border-color .2s}
-.btn:hover,button:hover{transform:translateY(-2px);border-color:var(--ac)}
+@keyframes float{50%{transform:translateY(-14px)}}
+.tag{display:inline-block;border:1px solid var(--bd);background:var(--sf);border-radius:999px;padding:4px 14px;
+  font-size:14px;color:var(--mu);margin-bottom:18px}
+h1{font-size:clamp(34px,6vw,56px);line-height:1.15;margin-bottom:10px;
+  background:var(--grad);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.role{font-size:19px;font-weight:600;margin-bottom:14px;
+  background:linear-gradient(90deg,var(--ac),var(--ac2));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.hero .btn{margin-inline-end:10px;margin-top:8px}
+.hero-admin{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+.me-wrap{justify-self:center;position:relative}
+.me{width:100%;max-width:250px;aspect-ratio:9/16;object-fit:contain;
+  border:6px solid var(--tx);border-radius:34px;background:linear-gradient(160deg,color-mix(in srgb,var(--ac) 10%,var(--sf)),var(--bg));
+  box-shadow:var(--shadow-sm);animation:up .7s both,float 6s ease-in-out .9s infinite}
+
+/* ---------- 5. shared bits ---------- */
+.g{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:16px}
+.sec-head{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:26px}
+.sec-head h2{margin-bottom:0}
+.sec-head .admin-add{margin-inline-start:auto}
+button,.btn{font:inherit;font-size:15px;cursor:pointer;border:1px solid var(--bd);background:var(--sf);color:var(--tx);
+  border-radius:999px;padding:8px 18px;display:inline-flex;align-items:center;gap:6px;
+  transition:transform .2s,border-color .2s,box-shadow .2s,background .2s}
+.btn:hover,button:hover{transform:translateY(-2px);border-color:var(--ac);box-shadow:var(--shadow-sm)}
+.btn.p{background:var(--grad);background-size:200% 100%;background-position:0 0;border-color:transparent;color:#fff;font-weight:600}
+.btn.p:hover{border-color:transparent;background-position:100% 0;box-shadow:var(--glow),var(--shadow-sm)}
+.btn.sm{padding:6px 12px;font-size:13px}
+.btn.ok{background:var(--ok);border-color:transparent;color:#fff}
+.btn.danger{background:var(--danger);border-color:transparent;color:#fff}
+.t{display:inline-block;padding:2px 12px;margin:3px;border:1px solid var(--bd);border-radius:999px;font-size:14px;color:var(--mu)}
+.tagrow{display:flex;flex-wrap:wrap;gap:2px;margin-top:6px}
 .ic{font-size:28px;display:block;margin-bottom:8px}
-@media(max-width:900px){#menuBtn{display:inline-block}nav{display:none;position:absolute;top:calc(100% + 10px);inset-inline:0;flex-direction:column;background:var(--sf);border:1px solid var(--bd);border-radius:20px;padding:8px}nav.open{display:flex}nav a{padding:12px 16px}.hero{grid-template-columns:1fr;padding-top:110px}.me{max-width:200px;grid-row:1}.hero::before{inset-inline-end:0}}
-@media(prefers-reduced-motion:reduce){.rv{opacity:1!important;transform:none!important}.hero::before{display:none}}
+.noimg{aspect-ratio:3/4;width:100%;display:grid;place-items:center;background:linear-gradient(135deg,var(--ac2),var(--ac));color:#fff;font-size:52px;font-weight:700}
+
+/* card hover base for the static .c blocks */
+.c{background:var(--sf);border:1px solid var(--bd);border-radius:16px;padding:22px;transition:transform .3s,border-color .3s,box-shadow .3s}
+.c:hover{transform:translateY(-4px);border-color:var(--ac);box-shadow:var(--shadow)}
+
+/* ---------- 6. skills (badge-style cards) ---------- */
+.sk-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px}
+.sk-card{position:relative;background:var(--sf);border:1px solid var(--bd);border-radius:16px;padding:18px 20px;
+  overflow:hidden;transition:transform .3s,border-color .3s,box-shadow .3s}
+.sk-card::before{content:"";position:absolute;inset-inline-start:0;top:0;bottom:0;width:4px;
+  background:linear-gradient(var(--ac),var(--ac2));transform:scaleY(.3);transform-origin:top;transition:transform .35s ease}
+.sk-card:hover{transform:translateY(-5px);border-color:var(--ac);box-shadow:var(--shadow)}
+.sk-card:hover::before{transform:scaleY(1)}
+.sk-title{font-size:17px;margin-bottom:4px}
+.sk-desc{font-size:14px;margin:0}
+
+/* ---------- 7. projects (portrait cards, h > w) ---------- */
+.pj-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:20px}
+.pj-card{position:relative;display:flex;flex-direction:column;background:var(--sf);border:1px solid var(--bd);
+  border-radius:var(--radius);overflow:hidden;cursor:pointer;transition:transform .35s,border-color .35s,box-shadow .35s}
+.pj-card:hover{transform:translateY(-6px);border-color:var(--ac);box-shadow:var(--shadow)}
+.pj-media{position:relative;aspect-ratio:3/4;overflow:hidden;
+  background:radial-gradient(120% 120% at 50% 0%,#141d30,#0a1120);border-bottom:1px solid var(--bd)}
+.pj-cover{width:100%;height:100%;object-fit:contain;padding:8px;transition:transform .5s ease}
+.pj-card:hover .pj-cover{transform:none}
+.pj-count{position:absolute;bottom:10px;inset-inline-end:10px;font-size:12px;padding:2px 8px;border-radius:999px;
+  background:color-mix(in srgb,#000 45%,transparent);color:#fff;backdrop-filter:blur(4px)}
+.pj-arrow{position:absolute;top:50%;transform:translateY(-50%);width:34px;height:34px;padding:0;border-radius:50%;
+  display:grid;place-items:center;font-size:20px;line-height:1;color:#fff;border:none;
+  background:color-mix(in srgb,#000 40%,transparent);backdrop-filter:blur(4px);opacity:0;transition:opacity .25s,background .2s,transform .2s}
+.pj-arrow.prev{left:10px}.pj-arrow.next{right:10px}
+.pj-media:hover .pj-arrow{opacity:1}
+.pj-arrow:hover{background:var(--ac);transform:translateY(-50%) scale(1.1)}
+.pj-body{padding:16px 16px 18px;display:flex;flex-direction:column;gap:6px;flex:1}
+.pj-title{font-size:17px;margin:0}
+.pj-excerpt{font-size:14px;margin:0;color:var(--mu);
+  display:-webkit-box;-webkit-line-clamp:3;line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;
+  text-overflow:ellipsis}
+.pj-view{margin-top:auto;align-self:flex-start}
+
+/* ---------- 8. certificates (spacious vertical badge cards) ---------- */
+.cert-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:22px}
+.cert-card{position:relative;display:flex;flex-direction:column;background:var(--sf);border:1px solid var(--bd);
+  border-radius:18px;overflow:hidden;cursor:pointer;transition:transform .35s,border-color .35s,box-shadow .35s}
+.cert-card:hover{transform:translateY(-6px);border-color:var(--ac);box-shadow:var(--shadow)}
+.cert-media{position:relative;width:100%;aspect-ratio:16/9;overflow:hidden;
+  background:radial-gradient(120% 120% at 50% 0%,#182238,#0a1120);border-bottom:1px solid var(--bd)}
+.cert-media img{width:100%;height:100%;object-fit:contain;padding:10px;transition:transform .5s ease}
+.cert-card:hover .cert-media img{transform:none}
+/* shiny metallic gold medal badge with a periodic light sweep */
+.cert-badge{position:absolute;top:10px;inset-inline-start:10px;width:40px;height:40px;display:grid;place-items:center;
+  border-radius:50%;font-size:20px;line-height:1;overflow:hidden;color:#5a3a00;
+  background:linear-gradient(145deg,#fff7d1 0%,#ffe38a 16%,#f5c534 40%,#cf9c1c 60%,#ffe89a 78%,#b8860b 100%);
+  border:1px solid rgba(255,255,255,.55);
+  box-shadow:0 4px 12px rgba(120,80,0,.45),inset 0 1px 2px rgba(255,255,255,.85),inset 0 -3px 5px rgba(120,80,0,.55)}
+.cert-badge::after{content:"";position:absolute;inset:-20%;transform:translateX(-130%) skewX(-18deg);
+  background:linear-gradient(120deg,transparent 34%,rgba(255,255,255,.75) 50%,transparent 66%);
+  animation:shine 3.8s ease-in-out infinite}
+@keyframes shine{0%,55%{transform:translateX(-130%) skewX(-18deg)}100%{transform:translateX(130%) skewX(-18deg)}}
+.cert-body{padding:18px 20px 20px;display:flex;flex-direction:column;gap:6px;flex:1}
+.cert-title{font-size:18px;margin:0}
+.cert-excerpt{font-size:14px;margin:0;color:var(--mu);display:-webkit-box;-webkit-line-clamp:3;line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;text-overflow:ellipsis}
+
+/* admin management toolbar shown only in admin mode, reused across all cards */
+.card-tools{position:absolute;top:8px;inset-inline-end:8px;display:none;gap:5px;z-index:3}
+body.admin .card-tools{display:flex}
+.card-tools .ct{width:30px;height:30px;padding:0;border:none;border-radius:9px;display:grid;place-items:center;
+  font-size:14px;line-height:1;color:#fff;box-shadow:var(--shadow-sm);cursor:pointer;
+  background:color-mix(in srgb,#0b1220 70%,transparent);backdrop-filter:blur(4px);
+  transition:transform .18s,background .18s,box-shadow .18s}
+.card-tools .ct:hover{transform:translateY(-2px) scale(1.06)}
+.ct-up:hover,.ct-down:hover{background:var(--ac)}
+.ct-eye{background:color-mix(in srgb,#334155 82%,transparent)}
+.ct-eye:hover{background:#475569}
+.ct-edit{background:var(--ac)}
+.ct-edit:hover{background:color-mix(in srgb,var(--ac) 82%,#fff)}
+.ct-del{background:color-mix(in srgb,var(--danger) 90%,#000)}
+.ct-del:hover{background:var(--danger)}
+
+/* owner preview of a hidden item: dimmed + dashed so it is clearly unpublished */
+.is-hidden{opacity:.5;filter:saturate(.6)}
+.is-hidden.pj-card,.is-hidden.cert-card,.is-hidden.c,.is-hidden.sk-card{outline:2px dashed color-mix(in srgb,var(--mu) 70%,transparent);outline-offset:-2px}
+
+/* .c cards host the toolbar, so they need a positioning context */
+.c{position:relative}
+
+/* about body + experience/education meta lines */
+#about-body{max-width:70ch}
+.about-lead{font-size:20px;font-weight:600;color:var(--tx);margin-bottom:14px}
+.x-meta{font-size:14px;color:var(--ac);margin:0 0 6px;font-weight:600}
+#experience .c,#education .c,#services .c{display:flex;flex-direction:column}
+
+/* bilingual form field language tags */
+.lang-tag{font-size:11px;font-weight:700;letter-spacing:.04em;color:var(--mu);text-transform:uppercase;margin-top:4px}
+.bi-field .hint{font-size:12px;color:var(--mu)}
+
+/* ---------- 9. services ---------- */
+#services .c p{margin:0}
+
+/* ---------- 10. contact / footer ---------- */
+.cbtns{display:flex;flex-wrap:wrap;gap:10px;margin-top:6px}
+.cbtn-slot{position:relative;display:inline-flex;align-items:center}
+.cbtn{display:inline-flex;align-items:center;gap:9px;padding:10px 18px;border:1px solid var(--bd);
+  border-radius:999px;background:var(--sf);color:var(--tx);font-weight:600;font-size:15px;
+  transition:transform .2s,border-color .2s,box-shadow .2s,color .2s}
+.cbtn:hover{transform:translateY(-2px);border-color:var(--ac);color:var(--ac);box-shadow:var(--shadow-sm)}
+.cbtn-ic{font-size:18px;line-height:1;display:inline-grid;place-items:center}
+.cbtn-t{white-space:nowrap}
+/* a chip is too small to overlay the toolbar on, so it flows inline after it */
+.cbtn-slot .card-tools{position:static;margin-inline-start:6px}
+/* hidden chip for the owner: dim, and visitors never render it at all */
+.cbtn.is-hidden{opacity:.45;filter:saturate(.6);border-style:dashed}
+.contact-sub{margin:22px 0 6px;font-size:17px}
+.sec-head.sub{margin-bottom:10px}
+.sec-head.sub .admin-add{margin-inline-start:0}
+footer{padding:28px 0;text-align:center;color:var(--mu);border-top:1px solid var(--bd);font-size:14px}
+
+/* ---------- 11. modal system ---------- */
+.overlay{position:fixed;inset:0;z-index:9000;display:none;background:color-mix(in srgb,#05070d 62%,transparent);
+  backdrop-filter:blur(6px);opacity:0;transition:opacity .22s}
+.overlay.show{display:block;opacity:1}
+.modal-wrap{position:absolute;inset:0;display:grid;place-items:center;padding:20px;pointer-events:none}
+.modal{pointer-events:auto;width:100%;max-width:520px;max-height:90vh;display:flex;flex-direction:column;
+  background:var(--sf);border:1px solid var(--bd);border-radius:22px;box-shadow:var(--shadow);overflow:hidden;
+  opacity:0;transform:translateY(24px) scale(.98);transition:opacity .22s ease,transform .28s cubic-bezier(.2,.8,.2,1)}
+.modal-wrap.open .modal{opacity:1;transform:none}
+.modal-wide{max-width:860px}
+.modal-full{max-width:1040px;max-height:94vh}
+.modal-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 20px;border-bottom:1px solid var(--bd)}
+.modal-title{font-size:18px;margin:0}
+.modal-x{width:36px;height:36px;padding:0;border-radius:50%;font-size:22px;line-height:1;border:none;background:var(--bg);color:var(--tx);flex:none}
+.modal-x:hover{transform:rotate(90deg)}
+.modal-body{padding:20px;overflow:auto;flex:1}
+/* when the title is empty (detail sheets) push the close button to the far edge */
+.modal-head .modal-title:empty ~ .modal-x{margin-inline-start:auto}
+
+/* ---------- 12. detail views ---------- */
+.detail{display:flex;flex-direction:column;gap:16px}
+.d-cover img{width:100%;max-height:60vh;object-fit:contain;border-radius:16px;background:var(--bg)}
+.d-cover .noimg{max-height:40vh}
+.d-title{font-size:24px;margin:6px 0 2px}
+.d-desc{font-size:16px;line-height:1.75;margin:0}
+.d-gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
+.d-gallery img{aspect-ratio:9/16;object-fit:cover;border-radius:12px;border:1px solid var(--bd);
+  transition:transform .3s,box-shadow .3s;cursor:zoom-in}
+.d-gallery img:hover{transform:translateY(-4px) scale(1.02);box-shadow:var(--shadow)}
+.d-actions{border-top:1px solid var(--bd);padding-top:18px;margin-top:6px}
+.d-cta{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:22px}
+.back-row{display:flex}
+.btn.back{align-self:flex-start;background:var(--bg)}
+.inquiry .btn.back{margin-top:6px;justify-content:center}
+
+/* ---------- 13. feedback + reviews ---------- */
+.reviews h4,.d-feedback h4{font-size:18px;margin-bottom:12px}
+.review{border:1px solid var(--bd);border-radius:14px;padding:14px 16px;margin-bottom:12px;background:var(--bg)}
+.review-head{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+.review-name{font-weight:600}
+.review-text{margin:0;color:var(--tx)}
+.stars{display:inline-flex;gap:2px}
+.stars .star{color:color-mix(in srgb,var(--mu) 55%,transparent)}
+.stars .star.on{color:var(--star)}
+.fb-form{display:flex;flex-direction:column;gap:8px;background:var(--bg);border:1px solid var(--bd);border-radius:16px;padding:18px}
+.star-picker{display:inline-flex;gap:4px;font-size:26px}
+.star-picker .star{background:none;border:none;padding:0;color:color-mix(in srgb,var(--mu) 45%,transparent);cursor:pointer;transition:transform .15s,color .15s}
+.star-picker .star.on{color:var(--star);transform:scale(1.1)}
+.fld{font:inherit;padding:10px 12px;border:1px solid var(--bd);border-radius:12px;background:var(--sf);color:var(--tx);width:100%}
+.fld:focus-visible{border-color:var(--ac);outline:none;box-shadow:var(--ring)}
+textarea.fld{resize:vertical}
+.fld-label{font-size:13px;color:var(--mu);margin-top:6px}
+.fld-err{color:var(--danger);font-size:14px;min-height:18px;margin:4px 0}
+
+/* ---------- 14. inquiry modal ---------- */
+.inquiry{display:flex;flex-direction:column;gap:12px}
+.inquiry-note{margin-bottom:4px}
+.ch{display:flex;align-items:center;gap:14px;width:100%;text-align:start;padding:14px 16px;cursor:pointer;
+  border:1px solid var(--bd);border-radius:14px;background:var(--bg);transition:transform .2s,border-color .2s,box-shadow .2s}
+.ch:hover{transform:translateX(4px);border-color:var(--ac)}
+[dir=rtl] .ch:hover{transform:translateX(-4px)}
+.ch-ic{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;flex:none;font-weight:700;
+  background:linear-gradient(135deg,var(--ac),var(--ac2));color:#fff}
+.ch-label{font-weight:600}
+
+/* ---------- 15. admin + upload forms ---------- */
+.admin-add{display:none}
+body.admin .admin-add{display:inline-flex}
+.admin-edit{display:none}
+body.admin .admin-edit{display:inline-flex}
+.add-form,.auth{display:flex;flex-direction:column;gap:8px}
+.bi-field{display:flex;flex-direction:column;gap:4px}
+.form-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:14px}
+.img-field{border:1px dashed var(--bd);border-radius:14px;padding:14px;margin:4px 0}
+.img-field-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.img-field-head .btn{margin-inline-start:auto}
+.hint{font-size:13px;color:var(--mu)}
+.previews{display:flex;flex-wrap:wrap;gap:10px;margin-top:12px}
+.preview{position:relative;width:96px;height:120px;border-radius:12px;overflow:hidden;border:1px solid var(--bd)}
+.preview img{width:100%;height:100%;object-fit:cover}
+.preview-x{position:absolute;top:4px;inset-inline-end:4px;width:24px;height:24px;padding:0;border-radius:50%;
+  border:none;background:color-mix(in srgb,#000 55%,transparent);color:#fff;font-size:16px;line-height:1}
+.preview-x:hover{background:var(--danger)}
+
+/* ---------- 16. notifications + moderation ---------- */
+.bell{display:none;position:relative}
+body.admin .bell{display:inline-flex}
+.notif{position:absolute;top:-6px;inset-inline-end:-6px;min-width:18px;height:18px;padding:0 5px;border-radius:999px;
+  background:var(--danger);color:#fff;font-size:11px;font-weight:700;display:grid;place-items:center;line-height:1}
+.mod-list{display:flex;flex-direction:column;gap:12px}
+.mod-item{display:flex;justify-content:space-between;gap:14px;align-items:flex-start;border:1px solid var(--bd);
+  border-radius:14px;padding:14px 16px;background:var(--bg)}
+.mod-meta{display:flex;align-items:center;gap:10px}
+.mod-project{font-size:13px;color:var(--ac);margin:2px 0}
+.mod-text{margin:6px 0 0;color:var(--tx)}
+.mod-actions{display:flex;flex-direction:column;gap:8px;flex:none}
+
+/* ---------- 17. toasts ---------- */
+.toasts{position:fixed;bottom:20px;inset-inline:0;z-index:12000;display:flex;flex-direction:column;align-items:center;gap:8px;pointer-events:none}
+.toast{pointer-events:auto;background:var(--sf);color:var(--tx);border:1px solid var(--bd);border-left:4px solid var(--ac);
+  border-radius:12px;padding:10px 18px;box-shadow:var(--shadow);opacity:0;transform:translateY(14px);transition:opacity .25s,transform .25s;max-width:90vw}
+.toast.show{opacity:1;transform:none}
+.toast.ok{border-left-color:var(--ok)}
+.toast.err{border-left-color:var(--danger)}
+
+/* ---------- 18. flourish: glow, media & new components ---------- */
+/* richer card hover: lift + accent ring + glow (overrides the plain --shadow) */
+.pj-card:hover,.sk-card:hover,.cert-card:hover,.c:hover{
+  box-shadow:var(--shadow),0 0 0 1px color-mix(in srgb,var(--ac) 22%,transparent),var(--glow)}
+.pj-card,.sk-card,.cert-card,.c{will-change:transform}
+/* thin gradient accent bar grows across the bottom of the shared cards */
+.c::after{content:"";position:absolute;inset-inline:0;bottom:0;height:3px;border-radius:0 0 16px 16px;
+  background:var(--grad);transform:scaleX(0);transform-origin:left;transition:transform .4s ease;opacity:.85}
+.c:hover::after{transform:scaleX(1)}
+
+/* gradient section titles */
+.sec-head h2{background:var(--grad);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+
+/* modal glow + gradient header underline */
+.modal{box-shadow:var(--shadow),0 0 60px color-mix(in srgb,var(--ac) 14%,transparent)}
+.modal-head{position:relative}
+.modal-head::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:2px;background:var(--grad);opacity:.55}
+
+/* project detail: sub-heading, links row, video */
+.d-sub{font-size:16px;margin:8px 0 2px;color:var(--tx)}
+.d-links{display:flex;flex-wrap:wrap;gap:10px;margin-top:6px}
+.d-links .btn{align-items:center}
+.btn.gh{background:#0d1117;border-color:transparent;color:#fff}
+.btn.gh:hover{background:#18222e;border-color:transparent;box-shadow:var(--shadow-sm)}
+.btn.dl{background:var(--grad);border-color:transparent;color:#fff;font-weight:600}
+.btn.dl:hover{border-color:transparent;box-shadow:var(--glow)}
+.ic-svg{display:inline-block;vertical-align:-2px}
+.d-video{border-radius:16px;overflow:hidden;border:1px solid var(--bd);background:#000}
+.d-video video{display:block;width:100%;max-height:70vh;background:#000}
+
+/* admin delete on a client-review card (hidden for visitors) */
+.review{position:relative}
+.review-del{position:absolute;top:8px;inset-inline-end:8px;width:30px;height:30px;padding:0;border:none;border-radius:9px;
+  display:none;place-items:center;font-size:14px;line-height:1;color:#fff;cursor:pointer;
+  background:color-mix(in srgb,var(--danger) 88%,#000);box-shadow:var(--shadow-sm);transition:transform .2s,background .2s}
+body.admin .review-del{display:grid}
+.review-del:hover{transform:scale(1.1);background:var(--danger)}
+
+/* chosen file name shown in the APK / video upload field */
+.file-name{display:inline-block;margin-top:8px;font-size:13px;color:var(--mu);max-width:100%;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* ---------- reveal on scroll (enhanced) ---------- */
+[data-reveal]{opacity:0;transform:translateY(30px) scale(.985);filter:blur(6px);
+  transition:opacity .7s ease,transform .7s cubic-bezier(.2,.75,.25,1),filter .7s ease}
+[data-reveal].in{opacity:1;transform:none;filter:blur(0)}
+
+/* ---------- responsive ---------- */
+@media(max-width:900px){
+  #menuBtn{display:inline-block}
+  nav{display:none;position:absolute;top:calc(100% + 10px);inset-inline:0;flex-direction:column;background:var(--sf);
+    border:1px solid var(--bd);border-radius:20px;padding:8px}
+  nav.open{display:flex}
+  nav a{padding:12px 16px}
+  .hero{grid-template-columns:1fr;padding-top:110px}
+  .me-wrap{grid-row:1}
+  .me{max-width:200px}
+  .hero::before{inset-inline-end:0}
+}
+@media(max-width:560px){
+  section{padding:56px 0}
+  .logo-text{display:none}
+  .cert-card{grid-template-columns:1fr}
+  .cert-media{aspect-ratio:16/9}
+  .pj-grid{grid-template-columns:repeat(auto-fill,minmax(160px,1fr))}
+  .d-cta .btn{width:100%;justify-content:center}
+  .mod-item{flex-direction:column}
+  .mod-actions{flex-direction:row}
+  .mod-actions .btn{flex:1}
+}
+
+/* ---------- reduced motion ---------- */
+@media(prefers-reduced-motion:reduce){
+  *{animation:none!important;scroll-behavior:auto!important;transition-duration:.01ms!important}
+  [data-reveal]{opacity:1!important;transform:none!important;filter:none!important}
+  body::before{animation:none!important}
+  .hero::before{display:none}
+}
+
+/* ---------- 8. brand + logo edit + section chrome + stats (Batch C) ---------- */
+/* wrapper is transparent to layout so the hero grid still applies to its two children */
+.home-wrap{display:contents}
+.logo{position:relative}
+.logo-edit[hidden]{display:none}
+.logo-edit{position:absolute;top:-7px;inset-inline-end:-8px;display:inline-grid;place-items:center;
+  width:19px;height:19px;padding:0;border-radius:50%;border:1px solid var(--bd);
+  background:var(--sf);color:var(--ac);font-size:11px;line-height:1;cursor:pointer;
+  box-shadow:var(--shadow-sm);transition:transform .2s,border-color .2s}
+.logo-edit:hover{transform:scale(1.14);border-color:var(--ac)}
+
+/* header nav items + admin move / delete / rename affordances */
+.nav-item{position:relative;display:flex;align-items:center}
+.nav-mv{display:none;align-items:center;justify-content:center;width:17px;height:17px;padding:0;
+  border-radius:50%;border:1px solid var(--bd);background:var(--sf);color:var(--mu);
+  font-size:12px;line-height:1;cursor:pointer;transition:transform .18s,color .18s,border-color .18s}
+.nav-mv:hover{color:var(--ac);border-color:var(--ac);transform:scale(1.12)}
+.nav-mv:disabled{opacity:.3;cursor:default;transform:none}
+.nav-mv.l{margin-inline-start:3px}
+.nav-mv.r{margin-inline-start:1px}
+.nav-mv.x{margin-inline-start:3px;color:#ff4d6d;border-color:color-mix(in srgb,#ff4d6d 50%,var(--bd))}
+.nav-mv.x:hover{border-color:#ff4d6d}
+body.admin .nav-item:hover .nav-mv,
+body.admin .nav-item:focus-within .nav-mv{display:inline-flex}
+
+/* custom-section bodies (grid / list / text) */
+.sec-body{display:grid;gap:16px;margin-top:4px}
+.sec-body.sb-grid{grid-template-columns:repeat(auto-fill,minmax(230px,1fr))}
+.sec-body.sb-list{grid-template-columns:1fr;gap:12px}
+.sec-body.sb-text{grid-template-columns:1fr;gap:18px}
+.c.cc-list{display:flex;gap:16px;align-items:flex-start}
+.c.cc-list .ic{flex:none}
+.cc-media{margin-bottom:14px;border-radius:14px;overflow:hidden;
+  background:color-mix(in srgb,var(--ac) 8%,var(--sf))}
+.cc-media img{width:100%;height:auto;max-height:340px;object-fit:contain;display:block}
+.c[role=button]{cursor:pointer}
+.c[role=button]:focus-visible{outline:2px solid var(--ac);outline-offset:3px}
+
+/* like + view metrics float to the card corners (wrapper drops out of flow via
+   display:contents so each control positions against the card, not a block). */
+.stat-row{display:contents}
+.stat-row .like-btn{position:absolute;top:10px;inset-inline-end:10px;z-index:4;margin:0;
+  display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:999px;
+  border:1px solid var(--bd);background:color-mix(in srgb,var(--sf) 88%,transparent);
+  backdrop-filter:blur(4px);color:var(--mu);font-size:13px;cursor:pointer;
+  box-shadow:var(--shadow-sm);transition:transform .16s,color .18s,border-color .18s}
+.stat-row .like-btn:hover{color:#ff4d6d;border-color:#ff4d6d}
+.stat-row .like-btn:active{transform:scale(.9)}
+.like-ic{font-size:15px;line-height:1;transform-origin:center}
+.like-count{font-weight:700;font-variant-numeric:tabular-nums}
+.stat-row .like-btn.is-liked{color:#ff4d6d;border-color:#ff4d6d}
+.like-btn.is-liked .like-ic{animation:likePop .34s ease}
+@keyframes likePop{0%{transform:scale(1)}40%{transform:scale(1.5)}100%{transform:scale(1)}}
+.stat-row .view-stat{position:absolute;bottom:9px;inset-inline-end:12px;z-index:2;margin:0;
+  display:inline-flex;align-items:center;gap:4px;font-size:12px;line-height:1;color:var(--mu);
+  opacity:.82;font-variant-numeric:tabular-nums;text-shadow:0 1px 2px color-mix(in srgb,var(--bg) 60%,transparent)}
+/* in the detail modal the same two controls sit inline at the bottom instead */
+.stat-row.is-inline{display:flex;align-items:center;gap:14px;margin-top:16px;padding-top:12px;
+  border-top:1px solid color-mix(in srgb,var(--bd) 60%,transparent)}
+.stat-row.is-inline .like-btn,.stat-row.is-inline .view-stat{position:static}
+
+/* reserve corner space so card headings never run under the floating heart */
+.pj-title,.sk-title,.cert-title,.c>h3{padding-inline-end:64px}
+/* in admin mode the manage toolbar shares the top-right, so drop it under the heart */
+body.admin .card-tools{top:44px}
+
+/* footer total-visitor counter */
+.foot-stats{margin-top:10px;font-size:13px;color:var(--mu)}
+.foot-views{display:inline-flex;align-items:center;gap:6px;font-variant-numeric:tabular-nums}
+
+/* admin quick-action bar — floats independently so the navbar stays slim */
+.admin-bar{display:none;position:fixed;bottom:18px;inset-inline-end:18px;z-index:8;
+  align-items:center;gap:10px;padding:8px 12px;border-radius:999px;
+  background:var(--glass);backdrop-filter:blur(18px) saturate(150%);
+  border:1px solid color-mix(in srgb,var(--bd) 80%,transparent);box-shadow:var(--shadow)}
+body.admin .admin-bar{display:flex}
+.admin-bar .bell{align-self:center}
+.admin-bar #addSectionBtn{border-color:var(--ac);color:var(--ac)}
+
+@media(max-width:900px){
+  .nav-item{width:100%}
+  .nav-item a{flex:1}
+}
+

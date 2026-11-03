@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Ammar Yasser Tolba | Flutter Developer</title>
 <meta name="description" content="Flutter Developer building responsive, user-friendly mobile apps with clean code.">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='16' fill='%230b63ce'/><text x='32' y='45' font-size='28' text-anchor='middle' fill='white' font-family='Arial' font-weight='700'>AT</text></svg>">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='%2338e0ff'/><stop offset='0.5' stop-color='%232f7dff'/><stop offset='1' stop-color='%237b4dff'/></linearGradient></defs><rect width='64' height='64' rx='16' fill='url(%23g)'/><path d='M37 14 L21 30 L28.5 37.5 L51 15 Z' fill='%23fff'/><path d='M21 34 L28.5 41.5 L37 41.5 L28.5 33 Z' fill='%23eaf5ff'/><path d='M31 33 L39.5 33 L48 41.5 L39.5 49 Z' fill='%23bfe1ff' fill-opacity='.6'/></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&family=Sora:wght@400;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css">
@@ -14,11 +14,44 @@
 
 <header>
   <div class="w">
-    <a class="logo" href="#home" aria-label="Home"><span class="mark">AT</span></a>
+    <a class="logo" href="#home" aria-label="Ammar Yasser — Flutter Developer">
+      <span class="logo-mark" id="logoBox">
+        <svg class="logo-svg" viewBox="0 0 64 64" role="img" aria-hidden="true" focusable="false">
+          <defs>
+            <linearGradient id="at-bg" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stop-color="#38e0ff"/>
+              <stop offset="0.5" stop-color="#2f7dff"/>
+              <stop offset="1" stop-color="#7b4dff"/>
+            </linearGradient>
+            <linearGradient id="at-wing" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stop-color="#ffffff"/>
+              <stop offset="1" stop-color="#d5ecff"/>
+            </linearGradient>
+            <radialGradient id="at-gloss" cx="0.3" cy="0.25" r="0.85">
+              <stop offset="0" stop-color="#ffffff" stop-opacity="0.38"/>
+              <stop offset="0.6" stop-color="#ffffff" stop-opacity="0"/>
+            </radialGradient>
+          </defs>
+          <rect x="2" y="2" width="60" height="60" rx="17" fill="url(#at-bg)"/>
+          <rect x="2" y="2" width="60" height="60" rx="17" fill="url(#at-gloss)"/>
+          <path d="M37 14 L21 30 L28.5 37.5 L51 15 Z" fill="url(#at-wing)" opacity="0.97"/>
+          <path d="M21 34 L28.5 41.5 L37 41.5 L28.5 33 Z" fill="#eaf5ff" opacity="0.82"/>
+          <path d="M31 33 L39.5 33 L48 41.5 L39.5 49 Z" fill="#bfe1ff" opacity="0.6"/>
+          <rect x="2.75" y="2.75" width="58.5" height="58.5" rx="16.25" fill="none" stroke="#ffffff" stroke-opacity="0.28" stroke-width="1.5"/>
+        </svg>
+        <img id="logoImg" class="logo-img" alt="Logo" hidden>
+      </span>
+      <span class="logo-text" id="brandText">
+        <span class="logo-name" id="brandName">Ammar</span>
+        <span class="logo-sub" id="brandSub">Flutter Dev</span>
+      </span>
+      <button id="brandEditBtn" class="logo-edit" type="button" hidden aria-label="Edit brand" title="Edit brand">✎</button>
+    </a>
     <nav id="nav">
       <a href="#about" data-ar="عني">About</a>
       <a href="#skills" data-ar="المهارات">Skills</a>
       <a href="#projects" data-ar="المشاريع">Projects</a>
+      <a href="#certificates" data-ar="الشهادات">Certificates</a>
       <a href="#services" data-ar="الخدمات">Services</a>
       <a href="#experience" data-ar="الخبرة">Experience</a>
       <a href="#education" data-ar="التعليم">Education</a>
@@ -32,86 +65,129 @@
   </div>
 </header>
 
+<!-- Admin-only quick actions live OUTSIDE the navbar so the header stays slim.
+     CSS reveals this bar only in body.admin. -->
+<div id="adminBar" class="admin-bar">
+  <button id="adminBell" class="bell" aria-label="Notifications" title="Pending reviews">
+    <span class="bell-ic">🔔</span><span id="notifCount" class="notif" hidden>0</span>
+  </button>
+  <button id="addSectionBtn" class="btn sm" type="button" data-ar="إضافة قسم">＋ Section</button>
+</div>
+
 <main class="w">
 
 <section id="home" class="hero">
-  <div>
-    <span class="tag" data-ar="متاح لفرص التدريب والوظائف والعمل الحر">Open to internships, junior roles and freelance</span>
-    <h1 data-ar="عمار ياسر طلبة">Ammar Yasser Tolba</h1>
-    <div class="role">Flutter Developer | Cross-Platform Mobile App Developer</div>
-    <p data-ar="أبني تطبيقات موبايل متجاوبة وسهلة الاستخدام بكود نظيف ووظائف عملية.">I build responsive, user-friendly mobile apps with clean code and practical functionality.</p>
-    <a class="btn p" href="#projects" data-ar="شاهد مشاريعي">See my projects</a>
-    <a class="btn" href="#contact" data-ar="تواصل معي">Contact me</a>
+  <div class="home-wrap">
+    <div>
+      <span class="tag" id="hero-badge" data-ar="متاح لفرص التدريب والوظائف والعمل الحر">Open to internships, junior roles and freelance</span>
+      <h1 id="hero-name" data-ar="عمار ياسر طلبة">Ammar Yasser Tolba</h1>
+      <div class="role" id="hero-role">Flutter Developer | Cross-Platform Mobile App Developer</div>
+      <p id="hero-summary" data-ar="أبني تطبيقات موبايل متجاوبة وسهلة الاستخدام بكود نظيف ووظائف عملية.">I build responsive, user-friendly mobile apps with clean code and practical functionality.</p>
+      <a class="btn p" href="#projects" data-ar="شاهد مشاريعي">See my projects</a>
+      <a class="btn" href="#contact" data-ar="تواصل معي">Contact me</a>
+      <div class="hero-admin">
+        <button class="admin-edit btn sm" data-kind="hero" data-ar="تعديل الواجهة">Edit Hero</button>
+        <button id="heroPhotoBtn" class="admin-edit btn sm" type="button" data-kind="hero" data-ar="تغيير الصورة">Change photo</button>
+      </div>
+    </div>
+    <div class="me-wrap">
+      <img class="me" id="hero-img" src="images/profile.jpg" alt="Ammar Yasser Tolba" onerror="this.style.display='none'">
+    </div>
   </div>
-  <img class="me" src="images/profile.jpg" alt="Ammar Yasser Tolba" onerror="this.style.display='none'">
 </section>
 
 <section id="about">
-  <h2 data-ar="عني">About me</h2>
-  <p data-ar="أنا مطور Flutter وطالب علوم حاسب أستمتع ببناء تطبيقات الموبايل وتحويل الأفكار إلى منتجات حقيقية تعمل. أركز على واجهات نظيفة ومتجاوبة وسهلة الاستخدام، مع التأكد من أن التطبيق يعمل بسلاسة على مختلف أحجام الشاشات. أتعلم تقنيات جديدة باستمرار وأطور مهارتي في حل المشكلات.">I’m a Flutter Developer and Computer Science student who enjoys building mobile applications and turning ideas into real, functional products. I focus on creating clean, responsive, and user-friendly interfaces while making sure the app works smoothly across different screen sizes. I’m always learning new technologies, improving my problem-solving skills, and looking for opportunities to build better applications.</p>
-  <p data-ar="أحب التفكير المنطقي وحل المشكلات المعقدة والمهام التي تتطلب إبداعًا وتحليلًا. البرمجة بالنسبة لي ليست تصميم واجهات فقط، بل فهم كيف تعمل الأشياء وإيجاد حلول فعالة وتحويل الأفكار إلى تطبيقات تعمل.">I enjoy logical thinking, solving complex problems, and tackling challenging tasks that require creativity and analytical skills. For me, programming is more than just designing interfaces; it’s about understanding how things work, finding efficient solutions, and turning ideas into functional applications.</p>
-  <span class="t" data-ar="تطبيقات الموبايل">Mobile apps</span><span class="t" data-ar="التفكير المنطقي">Logical thinking</span><span class="t" data-ar="حل المشكلات">Problem solving</span><span class="t" data-ar="ألعاب الاستراتيجية">Strategy games</span><span class="t">Clean Code</span>
-</section>
-
-<section id="skills">
-  <h2 data-ar="المهارات">Skills</h2>
-  <div class="g">
-    <div class="c"><h3 data-ar="لغات البرمجة">Languages</h3><span class="t">Dart</span><span class="t">C++</span><span class="t">Python</span><span class="t">SQL</span><span class="t" data-ar="JavaScript (أساسيات)">JavaScript (basics)</span></div>
-    <div class="c"><h3 data-ar="التقنيات">Frameworks</h3><span class="t">Flutter</span><span class="t">HTML5</span><span class="t">CSS3</span></div>
-    <div class="c"><h3 data-ar="الأدوات">Tools</h3><span class="t">VS Code</span><span class="t">Android Studio</span><span class="t">Git &amp; GitHub</span><span class="t">Figma</span></div>
-    <div class="c"><h3 data-ar="أساسيات علوم الحاسب">Core CS</h3><span class="t">OOP</span><span class="t">Data Structures</span><span class="t">Algorithms</span><span class="t">Operating Systems</span><span class="t" data-ar="قواعد البيانات و SQL">Databases &amp; SQL</span></div>
-    <div class="c"><h3 data-ar="مهارات شخصية">Soft skills</h3><span class="t" data-ar="التفكير التحليلي">Analytical thinking</span><span class="t" data-ar="الإبداع">Creativity</span><span class="t" data-ar="الانتباه للتفاصيل">Attention to detail</span><span class="t" data-ar="العمل الجماعي">Teamwork</span><span class="t" data-ar="التعلم المستمر">Continuous learning</span></div>
-    <div class="c"><h3 data-ar="اللغات">Languages spoken</h3><span class="t" data-ar="العربية: لغة أم">Arabic: native</span><span class="t" data-ar="الإنجليزية: محادثة بطلاقة">English: fluent in conversation</span></div>
+  <div class="sec-head">
+    <h2 class="sec-title">About me</h2>
+    <button class="admin-edit btn p" data-kind="about" data-ar="تعديل">Edit</button>
+  </div>
+  <div id="about-body">
+    <p class="about-lead" data-ar="مطور Flutter وطالب علوم حاسب">Flutter Developer &amp; Computer Science Student</p>
+    <p data-ar="أنا مطور Flutter وطالب علوم حاسب أستمتع ببناء تطبيقات الموبايل وتحويل الأفكار إلى منتجات حقيقية تعمل. أركز على واجهات نظيفة ومتجاوبة وسهلة الاستخدام، مع التأكد من أن التطبيق يعمل بسلاسة على مختلف أحجام الشاشات. أتعلم تقنيات جديدة باستمرار وأطور مهارتي في حل المشكلات.">I’m a Flutter Developer and Computer Science student who enjoys building mobile applications and turning ideas into real, functional products. I focus on creating clean, responsive, and user-friendly interfaces while making sure the app works smoothly across different screen sizes. I’m always learning new technologies, improving my problem-solving skills, and looking for opportunities to build better applications.</p>
+    <p data-ar="أحب التفكير المنطقي وحل المشكلات المعقدة والمهام التي تتطلب إبداعًا وتحليلًا. البرمجة بالنسبة لي ليست تصميم واجهات فقط، بل فهم كيف تعمل الأشياء وإيجاد حلول فعالة وتحويل الأفكار إلى تطبيقات تعمل.">I enjoy logical thinking, solving complex problems, and tackling challenging tasks that require creativity and analytical skills. For me, programming is more than just designing interfaces; it’s about understanding how things work, finding efficient solutions, and turning ideas into functional applications.</p>
+    <div class="tagrow">
+      <span class="t" data-ar="تطبيقات الموبايل">Mobile apps</span>
+      <span class="t" data-ar="التفكير المنطقي">Logical thinking</span>
+      <span class="t" data-ar="حل المشكلات">Problem solving</span>
+      <span class="t" data-ar="ألعاب الاستراتيجية">Strategy games</span>
+      <span class="t">Clean Code</span>
+    </div>
   </div>
 </section>
 
+<!-- SKILLS: populated by render.skills(); "+" shows only in admin mode -->
+<section id="skills">
+  <div class="sec-head">
+    <h2 class="sec-title">Skills</h2>
+    <button class="admin-add btn p" data-kind="skill" data-ar="إضافة مهارة">Add Skill</button>
+  </div>
+  <div id="skills-grid" class="sk-grid">
+    <div class="sk-card"><h3 class="sk-title" data-ar="لغات البرمجة">Languages</h3><p class="sk-desc" data-ar="Dart · C++ · Python · SQL · JavaScript (أساسيات)">Dart · C++ · Python · SQL · JavaScript (basics)</p></div>
+    <div class="sk-card"><h3 class="sk-title" data-ar="التقنيات">Frameworks</h3><p class="sk-desc">Flutter · HTML5 · CSS3</p></div>
+    <div class="sk-card"><h3 class="sk-title" data-ar="الأدوات">Tools</h3><p class="sk-desc">VS Code · Android Studio · Git &amp; GitHub · Figma</p></div>
+    <div class="sk-card"><h3 class="sk-title" data-ar="أساسيات علوم الحاسب">Core CS</h3><p class="sk-desc" data-ar="OOP · هياكل البيانات · الخوارزميات · نظم التشغيل · قواعد البيانات و SQL">OOP · Data Structures · Algorithms · Operating Systems · Databases &amp; SQL</p></div>
+    <div class="sk-card"><h3 class="sk-title" data-ar="مهارات شخصية">Soft skills</h3><p class="sk-desc" data-ar="التفكير التحليلي · الإبداع · الانتباه للتفاصيل · العمل الجماعي · التعلم المستمر">Analytical thinking · Creativity · Attention to detail · Teamwork · Continuous learning</p></div>
+    <div class="sk-card"><h3 class="sk-title" data-ar="اللغات">Languages spoken</h3><p class="sk-desc" data-ar="العربية: لغة أم · الإنجليزية: محادثة بطلاقة">Arabic: native · English: fluent in conversation</p></div>
+  </div>
+</section>
+
+<!-- PROJECTS: populated by render.projects(); portrait cards -->
 <section id="projects">
-  <h2 data-ar="المشاريع">Projects</h2>
+  <div class="sec-head">
+    <h2 class="sec-title">Projects</h2>
+    <button class="admin-add btn p" data-kind="project" data-ar="إضافة مشروع">Add Project</button>
+  </div>
+  <div id="projects-grid" class="pj-grid">
+    <article class="pj-card">
+      <div class="pj-media"><img class="pj-cover" src="images/healthcare/login.jpg" alt="Healthcare App" onerror="this.remove()"></div>
+      <div class="pj-body">
+        <h3 class="pj-title" data-ar="تطبيق رعاية صحية">Healthcare App</h3>
+        <p class="pj-excerpt" data-ar="تطبيق Flutter للرعاية الصحية فيه مسارين للمريض والطبيب: حجز المواعيد، وملفات الأطباء، والجداول، وواجهة الدفع.">A Flutter healthcare app with patient and doctor flows: appointment booking, doctor profiles, schedules and payment UI.</p>
+        <div class="tagrow"><span class="t">Dart</span><span class="t">Flutter</span></div>
+      </div>
+    </article>
+    <article class="pj-card">
+      <div class="pj-media"><img class="pj-cover" src="images/fashion/home.jpg" alt="Fashion Shopping App" onerror="this.remove()"></div>
+      <div class="pj-body">
+        <h3 class="pj-title" data-ar="تطبيق تسوق للأزياء">Fashion Shopping App</h3>
+        <p class="pj-excerpt" data-ar="تطبيق تسوق بـ Flutter لتصفح الملابس وعرض التفاصيل وتغيير الكميات مع حساب السعر الإجمالي لحظيًا.">A Flutter shopping app for browsing clothing, viewing details and changing quantities with a live total price.</p>
+        <div class="tagrow"><span class="t">Dart</span><span class="t">Flutter</span></div>
+      </div>
+    </article>
+    <article class="pj-card">
+      <div class="pj-media"><div class="noimg">🐍</div></div>
+      <div class="pj-body">
+        <h3 class="pj-title" data-ar="لعبة الثعبان">Snake Game</h3>
+        <p class="pj-excerpt" data-ar="لعبة بـ C++ لتدريب المنطق البرمجي والتصميم كائني التوجه.">A C++ game built to practise programming logic and object-oriented design.</p>
+        <div class="tagrow"><span class="t">C++</span><span class="t">OOP</span></div>
+      </div>
+    </article>
+    <article class="pj-card">
+      <div class="pj-media"><img class="pj-cover" src="images/domino.png" alt="Domino Games" onerror="this.remove()"></div>
+      <div class="pj-body">
+        <h3 class="pj-title" data-ar="ألعاب الدومينو">Domino Games</h3>
+        <p class="pj-excerpt" data-ar="ألعاب دومينو بـ Python تطبق القواعد والقرارات المنطقية والبرمجة كائنية التوجه.">Python domino games applying game rules, logical decisions and object-oriented programming.</p>
+        <div class="tagrow"><span class="t">Python</span><span class="t">OOP</span></div>
+      </div>
+    </article>
+  </div>
+</section>
 
-  <article class="pj">
-    <h3 data-ar="تطبيق رعاية صحية">Healthcare App</h3>
-    <p data-ar="تطبيق Flutter للرعاية الصحية فيه مسارين للمريض والطبيب: حجز المواعيد، وملفات الأطباء، والجداول، وواجهة الدفع. بنيت الشاشات القابلة لإعادة الاستخدام وتدفقات التطبيق لكل رحلة.">A Flutter healthcare app with patient and doctor flows: appointment booking, doctor profiles, schedules and payment UI. I built the reusable screens and the interactive flows for both journeys.</p>
-    <div class="ph">
-      <img src="images/healthcare/login.jpg" alt="Login screen" onerror="this.remove()">
-      <img src="images/healthcare/patient-home.jpg" alt="Patient home" onerror="this.remove()">
-      <img src="images/healthcare/appointment-1.jpg" alt="Appointment booking" onerror="this.remove()">
-      <img src="images/healthcare/doctor-home.jpg" alt="Doctor home" onerror="this.remove()">
-      <img src="images/healthcare/prescription.jpg" alt="Prescription" onerror="this.remove()">
-      <img src="images/healthcare/wallet.jpg" alt="Wallet" onerror="this.remove()">
-    </div>
-    <span class="t">Dart</span><span class="t">Flutter</span>
-  </article>
-
-  <article class="pj">
-    <h3 data-ar="تطبيق تسوق للأزياء">Fashion Shopping App</h3>
-    <p data-ar="تطبيق تسوق بـ Flutter لتصفح الملابس وعرض التفاصيل وتغيير الكميات مع حساب السعر الإجمالي لحظيًا، ثم الدفع ونموذج عنوان الشحن مع التحقق والتعديل.">A Flutter shopping app for browsing clothing, viewing details and changing quantities with a live total price, then checking out through a validated, editable shipping-address form.</p>
-    <div class="ph">
-      <img src="images/fashion/home.jpg" alt="Home" onerror="this.remove()">
-      <img src="images/fashion/choose-parts.jpg" alt="Choose items" onerror="this.remove()">
-      <img src="images/fashion/checkout.jpg" alt="Checkout" onerror="this.remove()">
-      <img src="images/fashion/pay-by-visa.jpg" alt="Pay by card" onerror="this.remove()">
-    </div>
-    <span class="t">Dart</span><span class="t">Flutter</span>
-  </article>
-
-  <article class="pj">
-    <h3 data-ar="لعبة الثعبان">Snake Game</h3>
-    <p data-ar="لعبة بـ C++ لتدريب المنطق البرمجي والتصميم كائني التوجه.">A C++ game built to practise programming logic and object-oriented design.</p>
-    <span class="t">C++</span><span class="t">OOP</span>
-  </article>
-
-  <article class="pj">
-    <h3 data-ar="ألعاب الدومينو">Domino Games</h3>
-    <p data-ar="ألعاب دومينو بـ Python تطبق القواعد والقرارات المنطقية والبرمجة كائنية التوجه.">Python domino games applying game rules, logical decisions and object-oriented programming.</p>
-    <div class="ph"><img src="images/domino.png" alt="Domino game" onerror="this.remove()"></div>
-    <span class="t">Python</span><span class="t">OOP</span><br>
-    <a class="btn" style="margin-top:12px" href="https://github.com/Ammar-yasser-tolba/Dominoes-Game" target="_blank" rel="noopener">GitHub</a>
-  </article>
+<!-- CERTIFICATES: new dedicated section, landscape badge cards -->
+<section id="certificates">
+  <div class="sec-head">
+    <h2 class="sec-title">Certificates &amp; Achievements</h2>
+    <button class="admin-add btn p" data-kind="certificate" data-ar="إضافة شهادة">Add Certificate</button>
+  </div>
+  <div id="certs-grid" class="cert-grid"></div>
 </section>
 
 <section id="services">
-  <h2 data-ar="الخدمات">Services</h2>
-  <div class="g">
+  <div class="sec-head">
+    <h2 class="sec-title">Services</h2>
+    <button class="admin-add btn p" data-kind="service" data-ar="إضافة خدمة">Add Service</button>
+  </div>
+  <div id="services-grid" class="g">
     <div class="c"><span class="ic">📱</span><h3 data-ar="تطبيقات Flutter">Flutter mobile apps</h3><p data-ar="تطبيقات أندرويد و iOS من كود Flutter واحد.">Android and iOS apps from a single Flutter codebase.</p></div>
     <div class="c"><span class="ic">🎨</span><h3 data-ar="تنفيذ التصميمات">UI implementation</h3><p data-ar="تحويل تصميمات Figma إلى شاشات Flutter نظيفة وتعمل.">Turning Figma designs into clean, working Flutter screens.</p></div>
     <div class="c"><span class="ic">📐</span><h3 data-ar="واجهات متجاوبة">Responsive layouts</h3><p data-ar="شاشات تتأقلم مع أحجام الموبايل والتابلت المختلفة.">Screens that adapt to different phone and tablet sizes.</p></div>
@@ -120,39 +196,68 @@
 </section>
 
 <section id="experience">
-  <h2 data-ar="الخبرة">Experience</h2>
-  <div class="g">
-    <div class="c"><h3 data-ar="تدريب Flutter في DEPI">Flutter training, DEPI</h3><p data-ar="مبادرة رواد مصر الرقمية. تطوير تطبيقات متعددة المنصات بـ Dart وFlutter، مع المشاركة في تحدي واجهات Flutter المتدرج. من 17 يوليو إلى 8 ديسمبر 2026.">Digital Egypt Pioneers Initiative. Cross-platform development with Dart and Flutter, plus a progressive Flutter UI challenge. 17 Jul to 8 Dec 2026.</p></div>
+  <div class="sec-head">
+    <h2 class="sec-title">Experience</h2>
+    <button class="admin-add btn p" data-kind="experience" data-ar="إضافة خبرة">Add Experience</button>
+  </div>
+  <div id="experience-grid" class="g">
+    <div class="c"><h3 data-ar="تدريب Flutter في DEPI">Flutter training, DEPI</h3><p class="x-meta" data-ar="مبادرة رواد مصر الرقمية · 17 يوليو – 8 ديسمبر 2026">Digital Egypt Pioneers Initiative · 17 Jul – 8 Dec 2026</p><p data-ar="تطوير تطبيقات متعددة المنصات بـ Dart وFlutter، مع المشاركة في تحدي واجهات Flutter المتدرج.">Cross-platform development with Dart and Flutter, plus a progressive Flutter UI challenge.</p></div>
     <div class="c"><h3 data-ar="أعمال حرة">Freelance</h3><p data-ar="أبني مشاريع عملية وأضيفها هنا فور تأكدها.">I’m building practical projects and will list client work here as it is confirmed.</p></div>
     <div class="c"><h3 data-ar="إنجازات">Achievements</h3><p data-ar="أنجزت عدة مشاريع برمجية بـ Flutter وPython وJavaScript وC++.">Completed multiple programming projects in Flutter, Python, JavaScript and C++.</p></div>
   </div>
 </section>
 
 <section id="education">
-  <h2 data-ar="التعليم">Education</h2>
-  <div class="g">
-    <div class="c"><h3 data-ar="جامعة الفيوم">Fayoum University</h3><p data-ar="كلية الحاسبات والمعلومات والذكاء الاصطناعي، قسم نظم المعلومات. الفرقة الرابعة، التخرج المتوقع 2027.">Faculty of Computers, Information and AI, Information Systems. Fourth year, expected graduation 2027.</p></div>
-    <div class="c"><h3 data-ar="الكورسات">Courses</h3><span class="t">Dart Programming</span><span class="t">Flutter Development</span><span class="t">OOP with Dart</span><span class="t">C++ Programming</span><span class="t">OOP with C++</span><span class="t">Data Structures</span><span class="t">Algorithms</span><span class="t">Database Systems and SQL</span></div>
+  <div class="sec-head">
+    <h2 class="sec-title">Education</h2>
+    <button class="admin-add btn p" data-kind="education" data-ar="إضافة تعليم">Add Education</button>
+  </div>
+  <div id="education-grid" class="g">
+    <div class="c"><h3 data-ar="جامعة الفيوم">Fayoum University</h3><p data-ar="كلية الحاسبات والمعلومات والذكاء الاصطناعي، قسم نظم المعلومات">Faculty of Computers, Information and AI — Information Systems</p><p class="x-meta" data-ar="الفرقة الرابعة · التخرج المتوقع 2027">Fourth year · expected graduation 2027</p></div>
+    <div class="c"><h3 data-ar="الكورسات">Courses</h3><div class="tagrow">
+      <span class="t">Dart Programming</span><span class="t">Flutter Development</span><span class="t">OOP with Dart</span><span class="t">C++ Programming</span><span class="t">OOP with C++</span><span class="t">Data Structures</span><span class="t">Algorithms</span><span class="t">Database Systems and SQL</span>
+    </div></div>
   </div>
 </section>
 
 <section id="contact" class="l">
-  <h2 data-ar="تواصل معي">Get in touch</h2>
-  <a href="mailto:ammar.3yasser7@gmail.com">ammar.3yasser7@gmail.com</a>
-  <a href="https://wa.me/201044016570" target="_blank" rel="noopener">WhatsApp: +20 104 401 6570</a>
-  <a href="https://www.linkedin.com/in/ammar-yasser-othman-tolba-574a92250/" target="_blank" rel="noopener">LinkedIn</a>
-  <a href="https://github.com/Ammar-yasser-tolba" target="_blank" rel="noopener">GitHub</a>
-  <h3 style="margin:18px 0 10px" data-ar="منصات العمل الحر">Freelance platforms</h3>
-  <a href="https://khamsat.com/user/ammar_yasser_tolba" target="_blank" rel="noopener">Khamsat</a>
-  <a href="https://mostaql.com/u/ammar_yasser_47" target="_blank" rel="noopener">Mostaql</a>
-  <a href="https://nafezly.com/u/ammaryasserothman" target="_blank" rel="noopener">Nafezly</a>
-  <a href="https://www.freelancer.com/u/ammaryassertolba" target="_blank" rel="noopener">Freelancer</a>
-  <a href="https://www.upwork.com/freelancers/~01111c54baed152a34" target="_blank" rel="noopener">Upwork</a>
+  <div class="sec-head">
+    <h2 class="sec-title">Get in touch</h2>
+    <button class="admin-add btn p" data-kind="contact" data-group="main" data-ar="إضافة رابط">Add Link</button>
+  </div>
+  <div id="contact-main" class="cbtns">
+    <div class="cbtn-slot"><a class="cbtn" href="mailto:ammar.3yasser7@gmail.com"><span class="cbtn-ic">✉️</span><span class="cbtn-t">ammar.3yasser7@gmail.com</span></a></div>
+    <div class="cbtn-slot"><a class="cbtn" href="https://wa.me/201044016570" target="_blank" rel="noopener"><span class="cbtn-ic">💬</span><span class="cbtn-t" data-ar="واتساب: +20 104 401 6570">WhatsApp: +20 104 401 6570</span></a></div>
+    <div class="cbtn-slot"><a class="cbtn" href="https://www.linkedin.com/in/ammar-yasser-othman-tolba-574a92250/" target="_blank" rel="noopener"><span class="cbtn-ic">in</span><span class="cbtn-t" data-ar="لينكدإن">LinkedIn</span></a></div>
+    <div class="cbtn-slot"><a class="cbtn" href="https://github.com/Ammar-yasser-tolba" target="_blank" rel="noopener"><span class="cbtn-ic">⌥</span><span class="cbtn-t">GitHub</span></a></div>
+  </div>
+
+  <h3 class="contact-sub" data-ar="منصات العمل الحر">Freelance platforms</h3>
+  <div class="sec-head sub">
+    <button class="admin-add btn sm" data-kind="contact" data-group="freelance" data-ar="إضافة منصة">Add Platform</button>
+  </div>
+  <div id="contact-freelance" class="cbtns">
+    <div class="cbtn-slot"><a class="cbtn" href="https://khamsat.com/user/ammar_yasser_tolba" target="_blank" rel="noopener"><span class="cbtn-t" data-ar="خمسات">Khamsat</span></a></div>
+    <div class="cbtn-slot"><a class="cbtn" href="https://mostaql.com/u/ammar_yasser_47" target="_blank" rel="noopener"><span class="cbtn-t" data-ar="مستقل">Mostaql</span></a></div>
+    <div class="cbtn-slot"><a class="cbtn" href="https://nafezly.com/u/ammaryasserothman" target="_blank" rel="noopener"><span class="cbtn-t" data-ar="نافذلي">Nafezly</span></a></div>
+    <div class="cbtn-slot"><a class="cbtn" href="https://www.freelancer.com/u/ammaryassertolba" target="_blank" rel="noopener"><span class="cbtn-t">Freelancer</span></a></div>
+    <div class="cbtn-slot"><a class="cbtn" href="https://www.upwork.com/freelancers/~01111c54baed152a34" target="_blank" rel="noopener"><span class="cbtn-t">Upwork</span></a></div>
+  </div>
 </section>
 
 </main>
 
-<footer>© 2026 Ammar Yasser Othman Emam Tolba</footer>
+<footer>
+  <div>© 2026 Ammar Yasser Othman Emam Tolba</div>
+  <div class="foot-stats"><span class="foot-views">👁 <span id="visitorCount">0</span> <span data-ar="زائرًا">visitors</span></span></div>
+</footer>
+
+<!-- Scripts in dependency order: storage -> i18n -> primitives -> views -> admin -> bootstrap -->
+<script src="js/db.js"></script>
+<script src="js/i18n.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/render.js"></script>
+<script src="js/admin.js"></script>
 <script src="js/main.js"></script>
 </body>
 </html>
