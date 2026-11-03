@@ -44,19 +44,17 @@
     .forEach(el => el.setAttribute('data-reveal', ''));
 
   /* ---- total visitor count ----
-     The shared global counter, so every device sees the same number. The last
-     value we received is mirrored into IndexedDB and used as the instant paint
-     (and as the fallback when offline or on file://).
+     The shared global counter, so every device sees the same number. It is never
+     mirrored into browser storage: until the backend answers, the footer says it
+     does not know instead of inventing a private figure.
      Counts.hit() is the dedupe: it increments a key at most once per session,
      which replaces the old manual `session_active` flag. */
   async function trackVisitor() {
     const node = document.getElementById('visitorCount');
     if (!node) return;
-    node.textContent = Counts.cached(Counts.SITE_KEY) ?? (Number(await DB.getMeta('visitors')) || 0);
+    node.textContent = Counts.cached(Counts.SITE_KEY) ?? '—';
     const total = await Counts.hit(Counts.SITE_KEY);
-    if (total == null) return;                    // service unreachable -> local stands
-    node.textContent = total;
-    try { await DB.setMeta('visitors', total); } catch (e) {}
+    if (total != null) node.textContent = total;
   }
 
   /* ---- boot ---- */
@@ -94,7 +92,9 @@
       Cloud.followDB();
       const cloud = await Cloud.init(rerenderSoon);
       if (cloud.synced) { render.all().then(observeSections); }
-      if (cloud.enabled && !cloud.hadData) console.info('[cloud] published local content as the first cloud doc');
+      if (cloud.enabled && !cloud.hadData && cloud.synced) {
+        console.info('[cloud] published local content as the first cloud doc');
+      }
     } catch (e) {
       console.warn('[cloud] sync failed; continuing from local data', e);
     }

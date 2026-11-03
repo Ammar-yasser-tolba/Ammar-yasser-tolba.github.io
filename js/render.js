@@ -56,10 +56,9 @@ const render = (() => {
       el('span', { class: 'like-count' }, String(item.likes || 0)),
     );
     const ckey = Counts.keyFor(item);
-    const shared = Counts.cached(ckey);
     const views = el('span', {
       class: 'view-stat', 'data-id': item.id, 'data-ckey': ckey, title: I18N.t('views'),
-    }, '👁 ' + String(shared != null ? shared : (item.views || 0)));
+    }, Counts.label(Counts.cached(ckey)));
     return el('div', { class: 'stat-row' + (inline ? ' is-inline' : '') }, like, views);
   }
 
@@ -106,23 +105,16 @@ const render = (() => {
     }));
   }
 
-  // Opens a card -> the shared global total goes up for every visitor.
-  // The local `item.views` is still kept as the offline/file:// fallback, and
-  // the badge is painted optimistically so the click always feels acknowledged.
+  // Opening a card sends one increment to the shared backend and repaints the
+  // badge from its answer. Nothing about a view is kept in this browser: no
+  // IndexedDB write, no local running total, so what a visitor sees is the
+  // number every other visitor sees. Counts.hit() dedupes per session.
   function bumpView(item) {
     if (!item) return;
-    item.views = (item.views || 0) + 1;
     const key = Counts.keyFor(item);
     const known = Counts.cached(key);
-    if (known != null) {
-      Counts.paint(key, known + 1);                 // optimistic, global-based
-    } else {
-      const v = item.views;
-      document.querySelectorAll('.view-stat[data-id="' + item.id + '"]')
-        .forEach(s => { s.textContent = '👁 ' + v; });
-    }
-    DB.put(item);
-    Counts.hitAndPaint(key);                        // authoritative global value
+    if (known != null) Counts.paint(key, known + 1);   // optimistic, global-based
+    Counts.hitAndPaint(key);                           // authoritative global value
   }
 
   // A single delegated listener serves every card and survives all re-renders.

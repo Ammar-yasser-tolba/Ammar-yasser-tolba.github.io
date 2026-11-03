@@ -93,6 +93,11 @@ const I18N = (() => {
     adminOff:      { en: 'Admin mode off', ar: 'وضع الإدارة متوقف' },
     enterPassword: { en: 'Enter admin password', ar: 'أدخل كلمة مرور الإدارة' },
     wrongPassword: { en: 'Wrong password', ar: 'كلمة المرور غير صحيحة' },
+    signInEmail:   { en: 'Owner email', ar: 'بريد المالك' },
+    signInPassword: { en: 'Owner password', ar: 'كلمة مرور المالك' },
+    signingIn:     { en: 'Signing in…', ar: 'جارٍ تسجيل الدخول…' },
+    wrongCredentials: { en: 'Sign-in failed — check the email and password', ar: 'فشل تسجيل الدخول — تحقق من البريد وكلمة المرور' },
+    notOwner:      { en: 'This account is not the one this site syncs to', ar: 'هذا الحساب ليس هو الذي يتزامن الموقع إليه' },
 
     // empty states
     emptyProjects: { en: 'No projects yet.', ar: 'لا توجد مشاريع بعد.' },

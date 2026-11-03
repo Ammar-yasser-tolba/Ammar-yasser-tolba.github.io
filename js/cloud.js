@@ -3,9 +3,10 @@
  * ----------------------------------------------------------------------------
  *   1. CONFIG — the only thing you edit
  *   2. what syncs, and what deliberately does not
- *   3. transport
- *   4. doc encode / decode against the IndexedDB cache
- *   5. real-time watch
+ *   3. credentials (Firebase Authentication)
+ *   4. transport
+ *   5. doc encode / decode against the IndexedDB cache
+ *   6. real-time watch
  *
  * IndexedDB stays as the cache that paints instantly; the cloud is the shared
  * source of truth on top of it. With CONFIG.databaseURL empty this module is
@@ -17,28 +18,38 @@
  *      -> Create database.
  *   2. Copy the Database URL, e.g. https://<id>-default-r.firebaseio.com
  *   3. Paste it into CONFIG.databaseURL.
- *   4. Rules -> paste:
+ *   4. For a gate that actually protects the data, enable Build -> Authentication
+ *      -> Sign-in method -> Email/Password, create one user for yourself, open
+ *      that user and copy its uid, then set CONFIG.webApiKey (Project settings ->
+ *      General -> your Web API key) and CONFIG.ownerUid. Rules -> paste:
  *        {
  *          "rules": {
  *            "portfolio": {
  *              ".read": true,
- *              "content":  { ".write": "auth != null" },
+ *              "content":  { ".write": "auth != null && auth.uid == 'YOUR_UID'" },
  *              "feedback": { ".write": true },
- *              "likes":    { ".write": true }
+ *              "likes":    { ".write": true },
+ *              "views":    { ".write": true }
  *            }
  *          }
  *        }
  *      content holds the admin-owned data and is the only gated node; visitors
- *      legitimately need to write their own review and their own like.
- *   5. For that gated write, set CONFIG.secret. The REST API accepts `auth=` as
- *      a legacy app *secret* (console -> Project settings -> Service accounts ->
- *      Database secrets — only exists on projects old enough to have one) or a
- *      Firebase Auth ID token, which expires within about an hour. A brand-new
- *      project usually has neither, in which case leave it empty and change the
- *      content rule to { ".write": true }. That is an OPEN write path: anyone
- *      who reads the page source could edit or wipe your content for every
- *      visitor. Genuine protection means a real sign-in plus a uid check in the
- *      rules — ask and that can be added.
+ *      legitimately need to write their own review, like and view. With
+ *      webApiKey set, unlocking Admin asks for that email and password and every
+ *      write carries the resulting ID token, so the rule above is enforced by
+ *      Firebase rather than by a string in this file. A signed-out device that
+ *      is refused on content stops trying to publish content and loses nothing
+ *      else: it still reads, still follows live edits, still posts reviews.
+ *   5. Without Authentication the only alternative is { ".write": true } on
+ *      content plus CONFIG.secret as a legacy app secret (console -> Project
+ *      settings -> Service accounts -> Database secrets — that tab exists only on
+ *      projects old enough to have one). A brand-new project has no such secret,
+ *      and an open content rule means anyone who reads the page source can edit
+ *      or wipe your content for every visitor.
+ *
+ * A token is kept in sessionStorage, not localStorage: it dies with the tab
+ * instead of sitting on a shared machine granting write access to whoever opens
+ * the browser next. Re-enter the password once per tab.
  *
  * VERIFIED against live firebaseio.com: cross-origin responses carry
  * access-control-allow-origin, and the OPTIONS preflight answers
@@ -53,7 +64,9 @@ const Cloud = (() => {
   const CONFIG = {
     databaseURL: '',            // 'https://<id>-default-r.firebaseio.com'
     path: 'portfolio',          // root node owned by this site
-    secret: '',                 // optional auth= credential for content writes
+    secret: '',                 // legacy app secret, only if Authentication is off
+    webApiKey: '',              // Project settings -> General -> Web API key
+    ownerUid: '',               // Authentication -> your user -> uid
     mediaMaxKB: 400,            // per-image budget for base64 inside the doc
     docMaxKB: 2048,             // doc ceiling; imagery is dropped past this
     pushDelay: 700,             // coalesce a burst of admin edits into one PUT
@@ -63,9 +76,9 @@ const Cloud = (() => {
   /* ---- 2. scope ----------------------------------------------------------- */
   const CONTENT_TYPES = ['project', 'skill', 'certificate', 'service', 'experience',
     'education', 'about', 'hero', 'contact', 'brand', 'section', 'card'];
-  // Views and likes already live on the shared counter service, so they are not
-  // part of the doc. Excluding them is also what stops a card click from
-  // producing a cloud write.
+  // Views and likes live in their own shared nodes (/views/<key>, /likes/<key>),
+  // never inside the doc, so they are not part of it. Excluding them is also what
+  // stops a card click from producing a content write.
   const STRIP = ['views', 'likes'];
   const SCHEMA = 1;
   const BINARY = /^(apk|vid)_/;   // APK/video blobs: far too large for JSON
@@ -73,6 +86,7 @@ const Cloud = (() => {
   /* ---- state ------------------------------------------------------------- */
   let applying = false;         // local writes while adopting a cloud doc
   let disabled = false;         // permission lost: stop calling, stay local
+  let contentBlocked = false;   // this device is a visitor: only content writes fail
   let pushTimer = null, repullTimer = null;
   let source = null, poller = null;
   let lastRaw = null;           // echo + no-op detection
@@ -96,10 +110,119 @@ const Cloud = (() => {
   const feedbackNode = () => root() + '/feedback';   // node, not *.json: child
   // paths are built by appending an id, and /feedback.json/<id>.json is a
   // different location that would silently create a key named "feedback.json".
-  const withAuth = u => !CONFIG.secret ? u
-    : u + (u.includes('?') ? '&' : '?') + 'auth=' + encodeURIComponent(CONFIG.secret);
+  const credential = () => idToken || CONFIG.secret;
+  const withAuth = u => {
+    const c = credential();
+    return !c ? u : u + (u.includes('?') ? '&' : '?') + 'auth=' + encodeURIComponent(c);
+  };
 
-  /* ---- 3. transport ------------------------------------------------------ */
+  /* ---- 3. credentials -----------------------------------------------------
+     Writes carry a Firebase ID token once Admin signs in, which is what makes
+     the `auth.uid == ...` rule real. A legacy app secret is used instead when
+     that is all the project has. */
+  const AUTH_KEY = 'cloudAuth';
+  let idToken = null, refreshToken = null, expiresAt = 0, refresher = null;
+
+  const authAvailable = () => !!CONFIG.webApiKey && isURL(CONFIG.databaseURL);
+  // "can authorise a write": a live token, or the refresh token to get one back,
+  // since call() renews transparently when a request is refused.
+  const authed = () => (!!idToken && Date.now() < expiresAt - 30000) || !!refreshToken;
+
+  function remember(session) {
+    try {
+      if (!session) sessionStorage.removeItem(AUTH_KEY);
+      else sessionStorage.setItem(AUTH_KEY, JSON.stringify(session));
+    } catch (e) {}
+  }
+
+  function adopt(session) {
+    idToken = session.id;
+    refreshToken = session.refresh;
+    expiresAt = session.expiresAt;
+    remember(session);
+    scheduleRefresh();
+  }
+
+  // An hour goes fast during an editing session: renew while the tab is still
+  // open rather than failing the next save.
+  function scheduleRefresh() {
+    clearTimeout(refresher);
+    if (!refreshToken || !enabled()) return;
+    refresher = setTimeout(() => { renew().catch(() => {}); },
+      Math.max(30000, expiresAt - Date.now() - 120000));
+  }
+
+  function signOut() {
+    clearTimeout(refresher);
+    idToken = null; refreshToken = null; expiresAt = 0;
+    remember(null);
+  }
+
+  async function post(url, body) {
+    try {
+      const res = await fetch(url, {
+        method: 'POST', cache: 'no-store',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body), signal: signal(),
+      });
+      const data = await res.json().catch(() => ({}));
+      return { ok: res.ok, status: res.status, data };
+    } catch (e) { return { ok: false, status: 0, data: {} }; }
+  }
+
+  /**
+   * signIn(email, password) — {ok:true} or {ok:false, reason}. The password is
+   * never stored anywhere; only the tokens the exchange returns are.
+   */
+  async function signIn(email, password) {
+    if (!authAvailable()) return { ok: false, reason: 'no webApiKey configured' };
+    const r = await post('https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword'
+      + '?key=' + encodeURIComponent(CONFIG.webApiKey),
+      { email: String(email || '').trim(), password: String(password || ''), returnSecureToken: true });
+    if (!r.ok) {
+      return { ok: false, reason: (r.data.error && r.data.error.message) || ('HTTP ' + r.status) };
+    }
+    const d = r.data;
+    // Checked here only to give a clear message; Firebase enforces the rule anyway.
+    if (CONFIG.ownerUid && d.localId !== CONFIG.ownerUid) {
+      return { ok: false, reason: 'WRONG_ACCOUNT' };
+    }
+    adopt({ id: d.idToken, refresh: d.refreshToken,
+      expiresAt: Date.now() + Number(d.expiresIn || 3600) * 1000 });
+    // A device that was locked out before now becomes able to write, so undo the
+    // earlier give-up and publish whatever was edited while read-only.
+    disabled = false; warned = false; contentBlocked = false;
+    if (!source && !poller) startWatch(onChange);
+    pushNow().catch(() => {});
+    return { ok: true };
+  }
+
+  async function renew() {
+    if (!refreshToken) return false;
+    const r = await post('https://securetoken.googleapis.com/v1/token'
+      + '?key=' + encodeURIComponent(CONFIG.webApiKey),
+      { grant_type: 'refresh_token', refresh_token: refreshToken });
+    if (!r.ok) { signOut(); return false; }
+    adopt({ id: r.data.id_token, refresh: r.data.refresh_token,
+      expiresAt: Date.now() + Number(r.data.expires_in || 3600) * 1000 });
+    return true;
+  }
+
+  // A reload in the same tab must not ask for the password again.
+  function restoreAuth() {
+    let s = null;
+    try { s = JSON.parse(sessionStorage.getItem(AUTH_KEY) || 'null'); } catch (e) {}
+    if (!s || !s.id) return false;
+    if (s.expiresAt - 30000 > Date.now()) {
+      idToken = s.id; refreshToken = s.refresh; expiresAt = s.expiresAt;
+      scheduleRefresh();
+      return true;
+    }
+    if (s.refresh) { refreshToken = s.refresh; renew(); return true; }  // best effort
+    return false;
+  }
+
+  /* ---- 4. transport ------------------------------------------------------ */
   const TIMEOUT = 12000;
   function signal() {
     try { return AbortSignal.timeout(TIMEOUT); } catch (e) { return undefined; }
@@ -111,16 +234,38 @@ const Cloud = (() => {
     warned = true;
     disabled = true;
     stopWatch();
-    const msg = 'Cloud sync unavailable (HTTP ' + status + ') — using local data';
-    console.warn('[cloud] Firebase refused the request. Check the Rules and CONFIG.secret. '
+    const hint = authAvailable() && !idToken ? ' — Admin must sign in to sync' : '';
+    console.warn('[cloud] Firebase refused the request. Check the Rules and the sign-in. '
       + 'The site keeps working from local data.');
-    if (window.UI && UI.toast) UI.toast(msg, 'err');
+    if (window.UI && UI.toast) {
+      UI.toast('Cloud sync unavailable (HTTP ' + status + ') — using local data' + hint, 'err');
+    }
+  }
+
+  async function call(method, url, value, headers) {
+    const once = () => fetch(withAuth(url), {
+      method,
+      cache: 'no-store',
+      // A GET with a Content-Type header is not what the REST examples send, so
+      // only requests that carry a body claim to.
+      headers: value === undefined ? Object.assign({}, headers)
+        : Object.assign({ 'Content-Type': 'application/json' }, headers || {}),
+      body: value === undefined ? undefined : JSON.stringify(value),
+      signal: signal(),
+    });
+    let res = await once();
+    // An expired token and a refused rule look the same from here, so spend one
+    // refresh before believing the answer.
+    if ((res.status === 401 || res.status === 403) && refreshToken) {
+      if (await renew()) res = await once();
+    }
+    return res;
   }
 
   async function getJSON(url) {
     if (!url) return null;
     try {
-      const res = await fetch(withAuth(url), { cache: 'no-store', signal: signal() });
+      const res = await call('GET', url);
       if (res.status === 404 || res.status === 204) return null;   // empty node
       if (res.status === 401 || res.status === 403) { deny(res.status); return null; }
       return res.ok ? await res.json() : null;
@@ -130,21 +275,42 @@ const Cloud = (() => {
   async function send(method, url, value) {
     if (!url || !configured()) return false;
     try {
-      const res = await fetch(withAuth(url), {
-        method,
-        cache: 'no-store',
-        headers: { 'Content-Type': 'application/json' },
-        body: value === undefined ? null : JSON.stringify(value),
-        signal: signal(),
-      });
+      const res = await call(method, url, value);
       if (res.status === 401 || res.status === 403) { deny(res.status); return false; }
+      return res.ok;
+    } catch (e) { return false; }
+  }
+
+  /**
+   * Content is the one node the rules reserve for the owner, so a refusal here
+   * means two very different things and must not get one answer:
+   *   - a signed-out device was refused: correct and permanent, it is a visitor.
+   *     Stop trying to publish and change nothing else, because this device can
+   *     still read, still receives live updates and still posts reviews.
+   *   - anything else (a signed-in owner refused, or no sign-in path exists):
+   *     the setup itself is wrong, so say so and stop calling.
+   */
+  async function sendContent(doc) {
+    try {
+      const res = await call('PUT', contentURL(), doc);
+      if (res.status === 401 || res.status === 403) {
+        if (authAvailable() && !authed()) {
+          if (!contentBlocked) {
+            contentBlocked = true;
+            console.info('[cloud] content is owner-only; edits on this device stay local until Admin signs in.');
+          }
+          return false;
+        }
+        deny(res.status);
+        return false;
+      }
       return res.ok;
     } catch (e) { return false; }
   }
 
   const sizeKB = doc => JSON.stringify(doc).length / 1024;
 
-  /* ---- 4. doc <-> cache -------------------------------------------------- */
+  /* ---- 5. doc <-> cache -------------------------------------------------- */
 
   function refsOf(item) {
     const out = [];
@@ -315,7 +481,7 @@ const Cloud = (() => {
   /* ---- push -------------------------------------------------------------- */
 
   function queuePush() {
-    if (!enabled() || applying) return;
+    if (!enabled() || applying || contentBlocked) return;
     clearTimeout(pushTimer);
     pushTimer = setTimeout(pushNow, CONFIG.pushDelay);
   }
@@ -323,10 +489,11 @@ const Cloud = (() => {
   async function pushNow() {
     if (!enabled() || applying) return false;
     clearTimeout(pushTimer);
+    if (contentBlocked) return false;
     const doc = await exportContent();
     const raw = fingerprint(doc);
     if (!raw || raw === lastRaw) return false;      // counter churn only
-    if (!(await send('PUT', contentURL(), doc))) return false;
+    if (!(await sendContent(doc))) return false;
     lastRaw = raw;
     return true;
   }
@@ -336,7 +503,11 @@ const Cloud = (() => {
   const putFeedback = fb => send('PUT', feedbackNode() + '/' + encodeURIComponent(fb.id) + '.json', fb);
   const deleteFeedback = id => send('DELETE', feedbackNode() + '/' + encodeURIComponent(id) + '.json');
 
-  /* ---- shared like totals -----------------------------------------------
+  /* ---- shared counters: likes and views ---------------------------------
+     Both live in their own node under the root and are keyed by Counts.keyFor(),
+     so a total belongs to the database rather than to any one browser. The rules
+     leave both publicly writable; content is the only gated node.
+
      The REST API has no atomic increment. Its documented equivalent is a
      conditional write: read the value plus its ETag, then PUT with `if-match`.
      A 412 means someone else wrote first, and the response carries their value
@@ -349,62 +520,79 @@ const Cloud = (() => {
      data left to fetch. So if the header comes back empty we fall back to a
      plain write: the total is still shared by everyone, just last-write-wins
      when two people click in the same instant.
-  -------------------------------------------------------------------------- */
-  const likeURL = key => root() + '/likes/' + encodeURIComponent(key) + '.json';
-  // A page re-render (language switch, live edit) must not re-fetch every total,
-  // so the last known value is kept per key and refreshed by each successful write.
-  const likeCache = new Map();
 
-  async function bumpLike(key, delta) {
+     Being a node like any other, a counter write also arrives on the open
+     stream: that is how a view on one device repaints every other visitor's
+     badge without a refresh.
+  -------------------------------------------------------------------------- */
+  // A page re-render (language switch, live edit) must not re-fetch every total,
+  // so the last known value is kept per node and key.
+  const counterCache = { likes: new Map(), views: new Map() };
+  const counterURL = (node, key) =>
+    root() + '/' + node + '/' + encodeURIComponent(key) + '.json';
+
+  async function bumpCounter(node, key, delta) {
     if (!enabled() || !key) return null;
-    const url = likeURL(key);
+    const cache = counterCache[node];
+    const url = counterURL(node, key);
     for (let attempt = 0; attempt < 3; attempt++) {
-      let current = 0, etag = null;
+      let current = 0, etag = null, res;
       try {
-        const res = await fetch(withAuth(url), {
-          cache: 'no-store', headers: { 'X-Firebase-ETag': 'true' }, signal: signal(),
-        });
-        if (res.status === 401 || res.status === 403) { deny(res.status); return null; }
-        if (res.ok) current = Number(await res.json()) || 0;
-        try { etag = res.headers.get('etag'); } catch (e) { etag = null; }
+        res = await call('GET', url, undefined, { 'X-Firebase-ETag': 'true' });
       } catch (e) { return null; }
+      if (res.status === 401 || res.status === 403) { deny(res.status); return null; }
+      if (res.ok) {
+        try { current = Number(await res.json()) || 0; } catch (e) { current = 0; }
+      }
+      try { etag = res.headers.get('etag'); } catch (e) { etag = null; }
 
       const next = Math.max(0, current + delta);
-      if (next === current) { likeCache.set(key, current); return current; }  // un-liking at zero
+      if (next === current) { cache.set(key, current); return current; }  // un-liking at zero
 
       if (!etag) {                                 // no CAS: last write wins
         if (!(await send('PUT', url, next))) return null;
-        likeCache.set(key, next);
+        cache.set(key, next);
         return next;
       }
 
       try {
-        const res = await fetch(withAuth(url), {
-          method: 'PUT',
-          cache: 'no-store',
-          headers: { 'Content-Type': 'application/json', 'if-match': etag },
-          body: String(next),
-          signal: signal(),
-        });
-        if (res.ok) { likeCache.set(key, next); return next; }
-        if (res.status === 412) continue;              // lost the race, retry
-        if (res.status === 401 || res.status === 403) { deny(res.status); }
-        return null;
+        res = await call('PUT', url, next, { 'if-match': etag });
       } catch (e) { return null; }
+      if (res.ok) { cache.set(key, next); return next; }
+      if (res.status === 412) continue;              // lost the race, retry
+      if (res.status === 401 || res.status === 403) { deny(res.status); }
+      return null;
     }
     return null;
   }
 
-  async function readLike(key) {
+  /**
+   * readCounter — a number, or null when the total could not be determined.
+   * A key that has never been written is a real shared ZERO, not an unknown:
+   * conflating the two is what makes a fresh project look broken.
+   */
+  async function readCounter(node, key) {
     if (!enabled() || !key) return null;
-    if (likeCache.has(key)) return likeCache.get(key);
-    const value = await getJSON(likeURL(key));
-    const total = typeof value === 'number' ? value : null;
-    if (total != null) likeCache.set(key, total);
-    return total;
+    const cache = counterCache[node];
+    if (cache.has(key)) return cache.get(key);
+    try {
+      const res = await call('GET', counterURL(node, key));
+      if (res.status === 404 || res.status === 204) { cache.set(key, 0); return 0; }
+      if (res.status === 401 || res.status === 403) { deny(res.status); return null; }
+      if (!res.ok) return null;
+      const value = await res.json();
+      const total = value == null ? 0 : (typeof value === 'number' ? value : null);
+      if (total != null) cache.set(key, total);
+      return total;
+    } catch (e) { return null; }
   }
 
-  /* ---- 5. real-time watch ------------------------------------------------ */
+  const bumpLike = (key, delta) => bumpCounter('likes', key, delta);
+  const readLike = key => readCounter('likes', key);
+  const bumpView = key => bumpCounter('views', key, 1);
+  const readView = key => readCounter('views', key);
+
+  /* ---- 6. real-time watch ------------------------------------------------ */
 
   function scheduleRepull() {
     clearTimeout(repullTimer);
@@ -424,14 +612,27 @@ const Cloud = (() => {
     if (!payload) return;                            // keep-alive
     const path = String(payload.path || '/');
     const data = payload.data;
-    // Like totals are not stored as items, but a write anywhere under /likes
-    // makes our cached number stale — drop it so the next paint re-reads.
-    if (path === '/likes' || /^\/likes\//.test(path)) {
-      if (data == null) likeCache.clear();
-      else {
-        const one = /^\/likes\/([^/]+)$/.exec(path);
-        if (one) likeCache.delete(decodeURIComponent(one[1]));
-        else likeCache.clear();
+    // Counter nodes: keep the cache exact, and put a new view total straight
+    // onto the page. This is what makes another visitor's view visible here
+    // without a reload.
+    const counter = /^\/(likes|views)(?:\/([^/]+))?$/.exec(path);
+    if (counter) {
+      const node = counter[1];
+      const cache = counterCache[node];
+      const show = (k, v) => {
+        if (node === 'views' && typeof Counts !== 'undefined') Counts.paint(k, v);
+      };
+      if (counter[2]) {
+        const key = decodeURIComponent(counter[2]);
+        if (data == null) cache.delete(key);
+        else { const total = Number(data) || 0; cache.set(key, total); show(key, total); }
+        return;
+      }
+      cache.clear();
+      if (data && typeof data === 'object') {
+        for (const [k, v] of Object.entries(data)) {
+          const total = Number(v) || 0; cache.set(k, total); show(k, total);
+        }
       }
       return;
     }
@@ -506,6 +707,7 @@ const Cloud = (() => {
   async function init(cb) {
     if (typeof cb === 'function') onChange = cb;
     if (!configured()) return { enabled: false, synced: false, hadData: false };
+    restoreAuth();
 
     const tree = await getJSON(nodeURL());
     let synced = false, hadData = !!tree;
@@ -513,12 +715,13 @@ const Cloud = (() => {
       synced = await hydrateFrom(tree);
       lastRaw = tree.content ? fingerprint(tree.content) : lastRaw;
     }
-    if (enabled() && !hadData) {
-      // First device to visit an empty database seeds it for everyone else.
+    // Only a device that can actually write seeds an empty database: otherwise
+    // the first visitor takes a refusal and gets marked read-only for nothing.
+    if (enabled() && !hadData && !(authAvailable() && !authed())) {
       if (await pushNow()) synced = true;
     }
-    if (enabled()) startWatch(cb);
-    return { enabled: enabled(), synced, hadData };
+    if (enabled()) startWatch(onChange);
+    return { enabled: enabled(), synced, hadData, signedIn: authed() };
   }
 
   /**
@@ -538,7 +741,11 @@ const Cloud = (() => {
   }
 
   return {
-    CONFIG, enabled, init, followDB, bumpLike, readLike,
-    get status() { return { enabled: enabled(), watching: !!source, polling: !!poller, disabled }; },
+    CONFIG, enabled, init, followDB, bumpLike, readLike, bumpView, readView,
+    authAvailable, authed, signIn, signOut,
+    get status() {
+      return { enabled: enabled(), watching: !!source, polling: !!poller,
+        disabled, contentBlocked, signedIn: authed() };
+    },
   };
 })();

@@ -101,8 +101,15 @@ const Admin = (() => {
   };
 
   /* ---- session ---- */
+  // With Authentication configured, the local flag alone is not enough: edits
+  // would be refused by the rules, so the affordances stay hidden until a live
+  // token exists (Cloud.init restores one from this tab before Admin.init runs).
   function isAdmin() {
-    try { return localStorage.getItem('admin') === '1'; } catch (e) { return false; }
+    let flagged = false;
+    try { flagged = localStorage.getItem('admin') === '1'; } catch (e) { return false; }
+    if (!flagged) return false;
+    if (typeof Cloud !== 'undefined' && Cloud.authAvailable() && !Cloud.authed()) return false;
+    return true;
   }
   function setSession(on) {
     try { on ? localStorage.setItem('admin', '1') : localStorage.removeItem('admin'); } catch (e) {}
@@ -116,25 +123,68 @@ const Admin = (() => {
   /* ---- unlock prompt (Ctrl+Shift+E) ---- */
   function requestUnlock() {
     if (isAdmin()) { lock(); return; }
-    const input = el('input', { type: 'password', class: 'fld', placeholder: I18N.t('enterPassword') });
     const err = el('p', { class: 'fld-err' });
-    const confirm = el('button', { class: 'btn p', type: 'button' }, I18N.t('save'));
 
+    // Without a cloud sign-in the password here is only a UI gate; with one it
+    // is Firebase deciding whether this browser may write at all.
+    if (!(typeof Cloud !== 'undefined' && Cloud.authAvailable())) {
+      const input = el('input', { type: 'password', class: 'fld', placeholder: I18N.t('enterPassword') });
+      const confirm = el('button', { class: 'btn p', type: 'button' }, I18N.t('save'));
+      const m = UI.Modal.open({
+        title: I18N.t('adminUnlocked'), size: 'md',
+        body: el('div', { class: 'auth' },
+          el('label', { class: 'fld-label' }, I18N.t('enterPassword')), input, err, confirm),
+      });
+      const submit = () => {
+        if (input.value === ADMIN_PASSWORD) {
+          setSession(true); m.close(); applyAdminState(); UI.toast(I18N.t('adminUnlocked'), 'ok');
+        } else { err.textContent = I18N.t('wrongPassword'); }
+      };
+      confirm.addEventListener('click', submit);
+      input.addEventListener('keydown', e => { if (e.key === 'Enter') submit(); });
+      input.focus();
+      return;
+    }
+
+    const email = el('input', { type: 'email', class: 'fld', autocomplete: 'username',
+      placeholder: I18N.t('signInEmail') });
+    const pass = el('input', { type: 'password', class: 'fld', autocomplete: 'current-password',
+      placeholder: I18N.t('signInPassword') });
+    const confirm = el('button', { class: 'btn p', type: 'button' }, I18N.t('save'));
     const m = UI.Modal.open({
       title: I18N.t('adminUnlocked'), size: 'md',
       body: el('div', { class: 'auth' },
-        el('label', { class: 'fld-label' }, I18N.t('enterPassword')), input, err, confirm),
+        el('label', { class: 'fld-label' }, I18N.t('signInEmail')), email,
+        el('label', { class: 'fld-label' }, I18N.t('signInPassword')), pass, err, confirm),
     });
-    const submit = () => {
-      if (input.value === ADMIN_PASSWORD) {
+    const submit = async () => {
+      confirm.disabled = true;
+      confirm.textContent = I18N.t('signingIn');
+      const r = await Cloud.signIn(email.value, pass.value);
+      pass.value = '';                          // never leave a password on screen
+      confirm.disabled = false;
+      confirm.textContent = I18N.t('save');
+      if (r.ok) {
         setSession(true); m.close(); applyAdminState(); UI.toast(I18N.t('adminUnlocked'), 'ok');
-      } else { err.textContent = I18N.t('wrongPassword'); }
+        return;
+      }
+      // Firebase's own codes are English service strings; translating them keeps
+      // an Arabic page from showing a raw English error.
+      err.textContent = r.reason === 'WRONG_ACCOUNT' ? I18N.t('notOwner')
+        : I18N.t('wrongCredentials');
+      confirm.focus();
     };
     confirm.addEventListener('click', submit);
-    input.addEventListener('keydown', e => { if (e.key === 'Enter') submit(); });
-    input.focus();
+    pass.addEventListener('keydown', e => { if (e.key === 'Enter') submit(); });
+    email.addEventListener('keydown', e => { if (e.key === 'Enter') submit(); });
+    email.focus();
   }
-  function lock() { setSession(false); applyAdminState(); UI.toast(I18N.t('adminOff')); }
+  function lock() {
+    setSession(false);
+    if (typeof Cloud !== 'undefined') Cloud.signOut();   // do not leave write rights in the tab
+    applyAdminState();
+    UI.toast(I18N.t('adminOff'));
+  }
 
   /* ---- ordering helper ---- */
   async function nextOrder(type) {
