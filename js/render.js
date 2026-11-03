@@ -95,6 +95,16 @@ const render = (() => {
     if (b) toggleLike(b.getAttribute('data-id'));
   });
 
+  // Email chips copy their address on click (works for the static fallback chip
+  // too, which has no render-time wiring). We never preventDefault, so the
+  // Gmail tab still opens — the clipboard is the belt-and-braces fallback.
+  document.addEventListener('click', e => {
+    const c = e.target.closest('[data-copy]');
+    if (!c) return;
+    const addr = c.getAttribute('data-copy');
+    UI.copy(addr).then(ok => UI.toast(ok ? I18N.t('emailCopied') : addr, ok ? 'ok' : 'err'));
+  });
+
   /* ---- header brand (logo + name + subtitle) ---- */
 
   async function brand() {
@@ -746,16 +756,41 @@ const render = (() => {
 
   /* ---- CONTACTS (social + freelance link chips) ---- */
 
+  // Web Gmail composer — opens in the browser instead of the OS mail client.
+  const GMAIL_COMPOSE = 'https://mail.google.com/mail/?view=cm&fs=1&to=';
+  // Encode everything that would break a query value, but keep "@" literal so
+  // the URL matches Gmail's own compose link exactly.
+  const encAddr = addr => encodeURIComponent(addr).replace(/%40/g, '@');
+
+  // Returns the bare address if this contact is an email link, else ''.
+  // Accepts "mailto:a@b.c" and a plain "a@b.c"; ignores real http(s) URLs.
+  const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  function emailOf(url) {
+    const raw = String(url || '').trim();
+    if (!raw) return '';
+    if (/^mailto:/i.test(raw)) {
+      const addr = raw.slice(7).split('?')[0].trim();
+      return EMAIL_RE.test(addr) ? addr : '';
+    }
+    if (raw.includes('://')) return '';           // a genuine URL, not an address
+    return EMAIL_RE.test(raw) ? raw : '';
+  }
+
   // One link chip: opens the exact stored URL. http(s) links open in a new tab;
-  // mailto:/tel:/other schemes open in place. Admin gets the manage toolbar.
+  // mailto: links are upgraded to the web Gmail composer. Admin gets the toolbar.
   function renderContactGroup(container, items) {
     if (!container) return;
     container.innerHTML = '';
     for (const item of items) {
+      const addr = emailOf(item.url);
       const external = /^https?:/i.test(item.url || '');
       const chip = el('a', {
-        class: 'cbtn' + hiddenClass(item), href: item.url || '#',
-        target: external ? '_blank' : null, rel: external ? 'noopener' : null,
+        class: 'cbtn' + hiddenClass(item),
+        href: addr ? GMAIL_COMPOSE + encAddr(addr) : (item.url || '#'),
+        target: (external || addr) ? '_blank' : null,
+        rel: (external || addr) ? 'noopener noreferrer' : null,
+        // data-copy makes the address land on the clipboard whatever else happens
+        'data-copy': addr || null,
       },
         el('span', { class: 'cbtn-ic' }, item.icon || '🔗'),
         el('span', { class: 'cbtn-t' }, I18N.pick(item.title)),

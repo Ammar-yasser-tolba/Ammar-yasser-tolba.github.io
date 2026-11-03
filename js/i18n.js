@@ -64,6 +64,7 @@ const I18N = (() => {
     contactVia:    { en: 'Reach me directly', ar: 'تواصل معي مباشرة' },
     whatsapp:      { en: 'WhatsApp', ar: 'واتساب' },
     email:         { en: 'Email (Gmail)', ar: 'بريد إلكتروني (Gmail)' },
+    emailCopied:   { en: 'Opening Gmail — email copied to clipboard', ar: 'فتح Gmail — تم نسخ البريد إلى الحافظة' },
     linkedin:      { en: 'LinkedIn', ar: 'لينكدإن' },
     inquirySubject:{ en: 'Inquiry about', ar: 'استفسار عن' },
 

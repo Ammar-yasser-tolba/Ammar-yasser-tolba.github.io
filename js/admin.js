@@ -489,12 +489,19 @@ const Admin = (() => {
 
     const wa = `https://wa.me/${CONTACT.whatsapp}?text=${encodeURIComponent(subject)}`;
     // Email opens Gmail's web composer directly (NOT mailto) in a new tab.
-    const gmail = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(CONTACT.email)}&su=${encodeURIComponent(subject)}`;
+    // The address keeps its literal "@" so the link matches Gmail's own form.
+    const toAddr = encodeURIComponent(CONTACT.email).replace(/%40/g, '@');
+    const gmail = `https://mail.google.com/mail/?view=cm&fs=1&to=${toAddr}&su=${encodeURIComponent(subject)}`;
     const li = CONTACT.linkedin;
 
-    const linkRow = (href, label, icon) => el('a', { class: 'ch', href, target: '_blank', rel: 'noopener' },
+    const linkRow = (href, label, icon) => el('a', { class: 'ch', href, target: '_blank', rel: 'noopener noreferrer' },
       el('span', { class: 'ch-ic' }, icon), el('span', { class: 'ch-label' }, label));
-    const emailRow = el('button', { class: 'ch', type: 'button', onclick: () => window.open(gmail, '_blank', 'noopener') },
+    // Gmail in a new tab, and the address always lands on the clipboard as well.
+    const emailRow = el('button', {
+      class: 'ch', type: 'button', onclick: () => {
+        window.open(gmail, '_blank', 'noopener,noreferrer');
+        UI.copy(CONTACT.email).then(ok => UI.toast(ok ? I18N.t('emailCopied') : CONTACT.email, ok ? 'ok' : 'err'));
+      } },
       el('span', { class: 'ch-ic' }, '✉'), el('span', { class: 'ch-label' }, I18N.t('email')));
 
     const body = el('div', { class: 'inquiry' },

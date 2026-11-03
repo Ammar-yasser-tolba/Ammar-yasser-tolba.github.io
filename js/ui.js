@@ -165,6 +165,32 @@ const UI = (() => {
     }, 2600);
   }
 
+  /* ---- clipboard ---- */
+
+  // Clipboard API needs a secure context; file:// and some browsers fall back
+  // to a hidden textarea + execCommand so the copy always has a chance to work.
+  function copy(text) {
+    const value = String(text || '');
+    if (!value) return Promise.resolve(false);
+    if (navigator.clipboard && window.isSecureContext) {
+      return navigator.clipboard.writeText(value).then(() => true).catch(() => legacyCopy(value));
+    }
+    return Promise.resolve(legacyCopy(value));
+  }
+
+  function legacyCopy(value) {
+    try {
+      const ta = el('textarea', { class: 'copy-shim', readonly: '' });
+      ta.value = value;
+      ta.style.cssText = 'position:fixed;top:-1000px;opacity:0';
+      document.body.append(ta);
+      ta.select();
+      const ok = document.execCommand('copy');
+      ta.remove();
+      return ok;
+    } catch (e) { return false; }
+  }
+
   /* ---- scroll reveal (reused for dynamic cards) ---- */
 
   let revealObserver;
@@ -201,5 +227,5 @@ const UI = (() => {
     });
   }
 
-  return { esc, el, Modal, toast, observeReveal, readImage };
+  return { esc, el, Modal, toast, observeReveal, readImage, copy };
 })();
