@@ -4,7 +4,13 @@
  * A total belongs to the world, not to this browser. Neither the view count nor
  * the like count is ever written to localStorage or IndexedDB, and neither is
  * ever painted from a browser-private number: a badge shows what the shared
- * backend reported, or says it does not know.
+ * backend reported. Until it reports, the badge shows 0 — an em dash or a blank
+ * corner of a card reads to a visitor as a broken page.
+ *
+ * That 0 is a display choice and nothing more. Internally an unread total stays
+ * null and is never written into the cache, so an optimistic +1 can never be
+ * built on top of a placeholder, and a backend that is down cannot pass itself
+ * off as a real zero to the rest of the code.
  *
  * Two meters, one code path, two backends (picked per request):
  *
@@ -37,8 +43,10 @@
  * then about 0.5s), which is why TIMEOUT is generous and why a slow read shows
  * the placeholder instead of quietly falling back to a local count.
  *
- * Counting NEVER blocks rendering: every call resolves to a number or null, and
- * null means "unknown", which is displayed as such.
+ * Counting NEVER blocks rendering and NEVER rejects: every call resolves to a
+ * number or null, null means "the backend could not tell me", and a null leaves a
+ * badge showing whatever it already had — which on a first load is the
+ * placeholder. A network glitch can cost a number, never the layout.
  * ==========================================================================*/
 
 const Counts = (() => {
@@ -49,14 +57,18 @@ const Counts = (() => {
   const TIMEOUT = 15000;                // see the cold-start note above
   const RESYNC_MS = 5000;               // Abacus cannot push, see resync()
   const RESYNC_BATCH = 6;               // keys per tick, so the sweep stays polite
-  const UNKNOWN = '—';                  // shown until the shared total arrives
+  // What a badge shows before the shared total arrives. A number, not a dash: an
+  // empty-looking corner reads as a broken page. It is a PLACEHOLDER only — it is
+  // never written into the cache, so no read, no optimistic increment and no
+  // comparison against a real total is ever built on it.
+  const PLACEHOLDER = 0;
 
   const METERS = {
     views: {
       ns: 'ammar-portfolio-v1',
       seen: 'counted_views',            // session dedupe, see hit()
       sel: '.view-stat',
-      label: value => '👁 ' + (value == null ? UNKNOWN : value),
+      label: value => '👁 ' + (value == null ? PLACEHOLDER : value),
       read: key => Cloud.readView(key),
       write: key => Cloud.bumpView(key),           // a view never goes down
       batch: tree => tree.views,
@@ -65,7 +77,7 @@ const Counts = (() => {
       ns: 'ammar-portfolio-likes',
       seen: 'counted_likes',
       sel: '.like-count',
-      label: value => (value == null ? UNKNOWN : String(value)),
+      label: value => String(value == null ? PLACEHOLDER : value),
       read: key => Cloud.readLike(key),
       write: (key, delta) => Cloud.bumpLike(key, delta),
       batch: tree => tree.likes,
@@ -164,6 +176,14 @@ const Counts = (() => {
     const inflight = new Map();           // slot -> Promise, single-flight
     const wroteAt = new Map();            // key -> when THIS device last wrote
 
+    // ask() runs inside the executor, so a backend that throws synchronously
+    // becomes a rejection here instead of unwinding the caller's stack, and the
+    // answer a rejection turns into is the same null the transports already give
+    // for "unknown". Nothing downstream can ever see a rejected promise, which is
+    // what lets every call site stay fire-and-forget.
+    const askSafe = (key, delta) =>
+      new Promise(resolve => resolve(ask(cfg, key, delta))).catch(() => null);
+
     // A read may be served from cache; a write may NOT, or warm() would make
     // every later click a no-op. Hence two paths, one cache.
     function get(key) {
@@ -171,11 +191,13 @@ const Counts = (() => {
       if (cache.has(key)) return Promise.resolve(cache.get(key));
       const slot = 'get:' + key;
       if (inflight.has(slot)) return inflight.get(slot);
-      const p = Promise.resolve(ask(cfg, key, 0)).then(value => {
-        inflight.delete(slot);
+      // finally, not then: a slot left behind by a failed read would pin its
+      // promise to that key and every later click would be answered by the dead
+      // request instead of the service.
+      const p = askSafe(key, 0).then(value => {
         if (value != null) cache.set(key, value);
         return value;
-      });
+      }).finally(() => inflight.delete(slot));
       inflight.set(slot, p);
       return p;
     }
@@ -185,11 +207,10 @@ const Counts = (() => {
       if (!key) return Promise.resolve(null);
       const slot = 'hit:' + key + ':' + delta;
       if (inflight.has(slot)) return inflight.get(slot);
-      const p = Promise.resolve(ask(cfg, key, delta)).then(value => {
-        inflight.delete(slot);
+      const p = askSafe(key, delta).then(value => {
         if (value != null) { cache.set(key, value); wroteAt.set(key, Date.now()); }
         return value;
-      });
+      }).finally(() => inflight.delete(slot));
       inflight.set(slot, p);
       return p;
     }
@@ -228,11 +249,16 @@ const Counts = (() => {
     // Mutates only the matching badges: no re-render, no layout thrash.
     // Deliberately does NOT touch the cache — an optimistic value must never
     // suppress the real request that follows it. An unknown (null) leaves the
-    // last shared value on screen rather than blanking it.
+    // number already on screen rather than blanking it, and a badge built before
+    // any reply carries the placeholder, so a paint can only ever change a digit.
+    // Guarded because most callers are fire-and-forget: a DOM failure here must
+    // cost the update, not throw into a chain nobody is awaiting.
     function paint(key, value) {
       if (value == null || !key) return;
-      document.querySelectorAll(cfg.sel + '[data-ckey="' + key + '"]')
-        .forEach(node => { node.textContent = cfg.label(value); });
+      try {
+        document.querySelectorAll(cfg.sel + '[data-ckey="' + key + '"]')
+          .forEach(node => { node.textContent = cfg.label(value); });
+      } catch (e) {}
     }
 
     function hitAndPaint(key) {
@@ -322,14 +348,19 @@ const Counts = (() => {
     const startedAt = Date.now();      // a click made while this is in flight wins
 
     if (useFirebase() && typeof Cloud.readCounters === 'function') {
-      Cloud.readCounters().then(tree => NAMES.forEach(name => {
+      const apply = tree => NAMES.forEach(name => {
         const meter = ALL[name];
         const map = tree ? METERS[name].batch(tree) : null;
         // null map: this meter could not be read at all, so ask per key.
         if (map == null) return pull(meter, watched, startedAt);
         // A key the node does not list is a real shared zero, not an unknown.
         watched.forEach(key => meter.note(key, Number(map[key]) || 0, startedAt));
-      }));
+      });
+      // Two requests for the whole page is the fast path. When it fails the
+      // badges must still get real numbers, so fall back to the per-key reads
+      // instead of leaving the placeholder standing there looking like a total.
+      Promise.resolve().then(() => Cloud.readCounters()).then(apply,
+        () => NAMES.forEach(name => pull(ALL[name], watched, startedAt)));
       keepInSync();
       return;
     }

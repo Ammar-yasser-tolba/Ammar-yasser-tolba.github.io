@@ -57,6 +57,15 @@ const I18N = (() => {
     coverRequired: { en: 'A certificate cover image is required.', ar: 'صورة غلاف الشهادة مطلوبة.' },
     titleRequired: { en: 'Please enter a title.', ar: 'الرجاء إدخال العنوان.' },
     saved:         { en: 'Saved.', ar: 'تم الحفظ.' },
+    // A save that cannot reach the shared database is not "saved" in the sense the
+    // owner means, and the difference is invisible until a visitor sees an empty
+    // section. Say which one happened, and leave the cause to cloudOff below.
+    savedLocal:    { en: 'Saved in this browser only — no visitor can see it yet.',
+                     ar: 'تم الحفظ في هذا المتصفح فقط — لا يستطيع أي زائر رؤيته بعد.' },
+    deletedLocal:  { en: 'Deleted in this browser only — visitors still see it.',
+                     ar: 'تم الحذف في هذا المتصفح فقط — الزوار لا يزالون يرونه.' },
+    cloudOff:      { en: 'Cloud sync is OFF — put your Firebase databaseURL in js/cloud.js so admin edits reach every visitor.',
+                     ar: 'المزامنة مع السحابة متوقفة — أضف رابط قاعدة بيانات Firebase في js/cloud.js لتصل تعديلات الإدارة إلى كل زائر.' },
 
     // inquiry / CTA
     inquire:       { en: 'Inquire About This Service', ar: 'استفسر عن هذه الخدمة' },

@@ -45,16 +45,21 @@
 
   /* ---- total visitor count ----
      The shared global counter, so every device sees the same number. It is never
-     mirrored into browser storage: until the backend answers, the footer says it
-     does not know instead of inventing a private figure.
-     Counts.views.hit() is the dedupe: it increments a key at most once per
-     session, which replaces the old manual `session_active` flag. */
+     mirrored into browser storage: the footer carries the placeholder zero until
+     the backend answers, then the real total. Counts.views.hit() is the dedupe: it
+     increments a key at most once per session, which replaces the old manual
+     `session_active` flag.
+     Guarded because boot() awaits this. A counter that cannot be reached should
+     cost a number, not the whole startup — cloud sync and admin mode are wired
+     after it and would otherwise never run. */
   async function trackVisitor() {
     const node = document.getElementById('visitorCount');
     if (!node) return;
-    node.textContent = Counts.views.cached(Counts.SITE_KEY) ?? '—';
-    const total = await Counts.views.hit(Counts.SITE_KEY);
-    if (total != null) node.textContent = total;
+    node.textContent = Counts.views.cached(Counts.SITE_KEY) ?? '0';
+    try {
+      const total = await Counts.views.hit(Counts.SITE_KEY);
+      if (total != null) node.textContent = total;
+    } catch (e) { console.warn('[counts] visitor total unavailable', e); }
   }
 
   /* ---- boot ---- */
@@ -106,5 +111,8 @@
     Admin.init();
   }
 
-  boot();
+  // A throw anywhere in boot() would otherwise leave the page half-built and say
+  // nothing at all; the sections that can fail are already guarded, this is the
+  // last line for the ones that cannot recover.
+  boot().catch(e => console.warn('[boot] did not finish cleanly', e));
 })();

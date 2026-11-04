@@ -475,7 +475,7 @@ body.admin .nav-item:focus-within .nav-mv{display:inline-flex}
 .stat-row .like-btn:hover{color:#ff4d6d;border-color:#ff4d6d}
 .stat-row .like-btn:active{transform:scale(.9)}
 .like-ic{font-size:15px;line-height:1;transform-origin:center}
-.like-count{font-weight:700;font-variant-numeric:tabular-nums}
+.like-count{font-weight:700;font-variant-numeric:tabular-nums;min-width:1.5ch;text-align:center}
 .stat-row .like-btn.is-liked{color:#ff4d6d;border-color:#ff4d6d}
 .like-btn.is-liked .like-ic{animation:likePop .34s ease}
 @keyframes likePop{0%{transform:scale(1)}40%{transform:scale(1.5)}100%{transform:scale(1)}}

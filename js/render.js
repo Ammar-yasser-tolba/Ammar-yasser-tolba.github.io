@@ -98,8 +98,11 @@ const render = (() => {
     saveLiked(set);
     paintHeart(id, !wasLiked);
 
+    // paint() deliberately never writes the cache, so starting from a placeholder
+    // when no reply has landed yet costs nothing: the click is answered on the
+    // screen at once, and the backend's number overwrites it a moment later.
     const known = Counts.likes.cached(key);
-    if (known != null) Counts.likes.paint(key, Math.max(0, known + (wasLiked ? -1 : 1)));
+    Counts.likes.paint(key, Math.max(0, (known == null ? 0 : known) + (wasLiked ? -1 : 1)));
     Counts.likes.toggle(key, wasLiked ? -1 : 1);
   }
 
@@ -111,8 +114,8 @@ const render = (() => {
     if (!item) return;
     const key = Counts.keyFor(item);
     const known = Counts.views.cached(key);
-    if (known != null) Counts.views.paint(key, known + 1);   // optimistic, global-based
-    Counts.views.hitAndPaint(key);                           // authoritative global value
+    Counts.views.paint(key, (known == null ? 0 : known) + 1);   // optimistic, never cached
+    Counts.views.hitAndPaint(key);                               // authoritative total
   }
 
   // A single delegated listener serves every card and survives all re-renders.

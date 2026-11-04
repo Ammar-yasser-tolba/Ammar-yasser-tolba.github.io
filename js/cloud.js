@@ -11,7 +11,11 @@
  * IndexedDB stays as the cache that paints instantly; the cloud is the shared
  * source of truth on top of it. With CONFIG.databaseURL empty this module is
  * inert and the site behaves exactly as before — still offline-safe and
- * file://-safe.
+ * file://-safe. INERT IS NOT NEUTRAL, THOUGH: every admin add, edit and delete
+ * then stays inside that one browser, so a certificate published from the owner's
+ * laptop is invisible to every visitor and a certificate deleted there still shows
+ * on theirs. js/admin.js checks Cloud.enabled() and says so out loud for that
+ * reason. Until the URL below is pasted, nothing in this module moves.
  *
  * FIREBASE SETUP (~3 minutes, one paste below)
  *   1. console.firebase.google.com -> new project -> Build -> Realtime Database
@@ -71,6 +75,8 @@ const Cloud = (() => {
     docMaxKB: 2048,             // doc ceiling; imagery is dropped past this
     pushDelay: 700,             // coalesce a burst of admin edits into one PUT
     pollMs: 8000,               // fallback cadence when streaming is unavailable
+    streamBeatMs: 20000,        // wait this long for proof the stream delivers
+    streamRetryMs: 30000,       // poll for this long before re-opening it
   };
 
   /* ---- 2. scope ----------------------------------------------------------- */
@@ -89,7 +95,31 @@ const Cloud = (() => {
   let contentBlocked = false;   // this device is a visitor: only content writes fail
   let pushTimer = null, repullTimer = null;
   let source = null, poller = null;
+  // Liveness of the stream: `beat` is whether it has ever delivered anything,
+  // beatTimer is the watchdog that decides a silent connection is a dead one, and
+  // retryTimer schedules another attempt after falling back to polling.
+  let beat = false, beatTimer = null, retryTimer = null;
   let lastRaw = null;           // echo + no-op detection
+  // Has this device SEEN the shared content? Only a device that has may publish
+  // it: the doc is written whole, so a device that never read the cloud would
+  // overwrite whatever is out there with its own private, seeded copy. Stays false
+  // when the opening pull FAILED, which is a different fact from finding the node
+  // genuinely empty — see pullTree().
+  let knownCloud = false;
+  // Is the shared doc the one this device holds? Nothing is owed when init finds
+  // data, when a doc is adopted, or once a publish lands; a local write owes one.
+  // flush() answers from this so that admin.js can say what actually happened.
+  let sharedCurrent = false;
+  // Content this device has changed and the shared doc does not have yet. The cloud
+  // is authoritative for everything else, so without remembering it an add made
+  // while the read path was down would be pruned away by the next adoption and
+  // never published — a certificate the owner typed and nobody ever saw — and a
+  // delete made there would be undone by the doc that still lists it.
+  const owedAdds = new Set(), owedDels = new Set();
+  // An upload is owed too, because an adoption that found nothing item-shaped to
+  // owe would otherwise clear the belief that a picture this device holds is shared.
+  let owedMedia = false;
+  const owed = () => owedAdds.size > 0 || owedDels.size > 0 || owedMedia;
   let onChange = () => {};
 
   function isURL(u) {
@@ -218,7 +248,9 @@ const Cloud = (() => {
       scheduleRefresh();
       return true;
     }
-    if (s.refresh) { refreshToken = s.refresh; renew(); return true; }  // best effort
+    // Best effort, and explicitly un-fatal: this runs during init with nobody
+    // awaiting it, so an unhandled rejection here would look like a broken page.
+    if (s.refresh) { refreshToken = s.refresh; renew().catch(() => {}); return true; }
     return false;
   }
 
@@ -234,7 +266,12 @@ const Cloud = (() => {
     warned = true;
     disabled = true;
     stopWatch();
-    const hint = authAvailable() && !idToken ? ' — Admin must sign in to sync' : '';
+    // Naming the actual misconfiguration matters here: with the documented rules,
+    // content is writable only by the owner, so a device that sends no credential
+    // at all is refused every admin edit forever. That happens when webApiKey is
+    // empty (no sign-in is then possible) and secret is empty too.
+    const hint = authAvailable() && !idToken ? ' — Admin must sign in to sync'
+      : (!credential() ? ' — this device sends no credential: set CONFIG.webApiKey and sign in, or CONFIG.secret' : '');
     console.warn('[cloud] Firebase refused the request. Check the Rules and the sign-in. '
       + 'The site keeps working from local data.');
     if (window.UI && UI.toast) {
@@ -262,14 +299,23 @@ const Cloud = (() => {
     return res;
   }
 
-  async function getJSON(url) {
-    if (!url) return null;
+  /**
+   * The whole shared tree, with the two nulls kept apart. A node that is not there
+   * IS an answer (the database is empty, and an owner device may seed it); a
+   * request that never got through is not an answer at all, and a device that has
+   * not seen the shared content must not publish over it. Collapsing the two — as
+   * a plain "give me the JSON" helper has to — is what would let a laptop with a
+   * broken read path overwrite every visitor's page with its own private seed.
+   */
+  async function pullTree() {
     try {
-      const res = await call('GET', url);
-      if (res.status === 404 || res.status === 204) return null;   // empty node
-      if (res.status === 401 || res.status === 403) { deny(res.status); return null; }
-      return res.ok ? await res.json() : null;
-    } catch (e) { return null; }
+      const res = await call('GET', nodeURL());
+      if (res.status === 404 || res.status === 204) return { ok: true, value: null };
+      if (res.status === 401 || res.status === 403) { deny(res.status); return { ok: false }; }
+      if (!res.ok) return { ok: false };
+      const value = await res.json();
+      return { ok: true, value: value || null };
+    } catch (e) { return { ok: false }; }
   }
 
   async function send(method, url, value) {
@@ -336,9 +382,11 @@ const Cloud = (() => {
     catch (e) { return null; }
   }
 
-  // A stable fingerprint of everything the doc is responsible for. `updatedAt`
-  // is excluded on purpose: it changes on every push and would defeat the
-  // "nothing actually changed" and echo checks.
+  // A stable fingerprint of everything the doc is responsible for. `updatedAt` is
+  // excluded on purpose: it changes on every push and would defeat the "nothing
+  // actually changed" and echo checks. The media KEY SET is what counts, not the
+  // base64 — which is also why an image that had to be dropped for size still
+  // registers as a change the next time it fits.
   function fingerprint(doc) {
     if (!doc || !doc.items) return null;
     return JSON.stringify({
@@ -364,7 +412,11 @@ const Cloud = (() => {
     const skipped = [];
     for (const key of wanted) {
       const blob = await DB.getImage(key);
-      if (!blob) continue;                                  // not on this device
+      // Absent on this device is normal (a blob this device has not downloaded
+      // yet, an item adopted before its image arrived) and says nothing about size,
+      // so it is not counted as an omission. Only a blob that is too big to carry
+      // belongs in the message below.
+      if (!blob) continue;
       if (blob.size > CONFIG.mediaMaxKB * 1024) { skipped.push(key); continue; }
       try { media[key] = await blobToDataURL(blob); } catch (e) { skipped.push(key); }
     }
@@ -391,6 +443,7 @@ const Cloud = (() => {
     const raw = fingerprint(doc);
     if (!raw || raw === lastRaw) return false;               // our own echo
     lastRaw = raw;
+    sharedCurrent = !owed();  // true only when nothing this device made is unpublished
 
     applying = true;
     let changed = false;
@@ -402,9 +455,10 @@ const Cloud = (() => {
         for (const item of await DB.getAll(type)) localById.set(item.id, item);
       }
       for (const [id, item] of localById) {
-        if (!(id in cloud)) { await DB.del(id); changed = true; }
+        if (!(id in cloud) && !owedAdds.has(id)) { await DB.del(id); changed = true; }
       }
       for (const id of Object.keys(cloud)) {
+        if (owedDels.has(id)) continue;   // removed here, not published yet: do not resurrect it
         const remote = cloud[id];
         if (!remote || !CONTENT_TYPES.includes(remote.type)) continue;
         const local = localById.get(id);
@@ -475,27 +529,68 @@ const Cloud = (() => {
     if (!tree) return false;
     const a = await applyContent(tree.content);
     const b = await applyFeedback(tree.feedback, 'feedback' in tree);
+    // An adoption that kept a local change the shared doc lacks has left the two
+    // apart on purpose, so that difference still has to go out. applyContent has
+    // released the adopting flag by now, which makes this a real push rather than
+    // one suppressed as the echo of a merge.
+    if (owed()) queuePush();
     return a || b;
   }
 
   /* ---- push -------------------------------------------------------------- */
 
+  function unschedulePush() { clearTimeout(pushTimer); pushTimer = null; }
+
   function queuePush() {
     if (!enabled() || applying || contentBlocked) return;
-    clearTimeout(pushTimer);
+    sharedCurrent = false;            // this device now holds something shared does not
+    // One push covers the whole document, so a write that arrives while one is
+    // already scheduled is simply included in it. Restarting the delay instead
+    // would push it back for as long as writes keep coming — and an adoption that
+    // finds a debt queues itself on every poll tick, which would never publish at
+    // all. Bounded latency, same single write.
+    if (pushTimer) return;
     pushTimer = setTimeout(pushNow, CONFIG.pushDelay);
   }
 
   async function pushNow() {
     if (!enabled() || applying) return false;
-    clearTimeout(pushTimer);
+    unschedulePush();
     if (contentBlocked) return false;
+    // Publishing blind would replace the shared doc with this device's private
+    // copy, so a device that has not read the cloud yet keeps its edits to itself
+    // and tries again on the next known state. Nothing is fetched here: the opening
+    // pull, a poll tick or the stream's first frame sets knownCloud, and each of
+    // those already runs on its own schedule.
+    if (!knownCloud) { pushTimer = setTimeout(pushNow, CONFIG.pollMs); return false; }
     const doc = await exportContent();
     const raw = fingerprint(doc);
-    if (!raw || raw === lastRaw) return false;      // counter churn only
+    if (!raw) return false;
+    // Identical to the doc already up there: nothing is owed, not even a remembered
+    // item, because that memory is only ever about content the fingerprint covers.
+    if (raw === lastRaw) { settle(); return false; }
     if (!(await sendContent(doc))) return false;
     lastRaw = raw;
+    settle();
     return true;
+  }
+
+  // The shared doc is this doc: the debt that made them differ is paid.
+  function settle() {
+    owedAdds.clear(); owedDels.clear(); owedMedia = false;
+    sharedCurrent = true;
+  }
+
+  /**
+   * flush() — publish now instead of after the debounce, for a caller that has to
+   * say out loud whether the change reached everyone. The answer is about CONTENT:
+   * an image too large for the doc is reported by exportContent on its own, so a
+   * true here can still mean "your text synced and one picture stayed home".
+   */
+  async function flush() {
+    if (!enabled() || applying || contentBlocked) return false;
+    if (!sharedCurrent) await pushNow();
+    return sharedCurrent;
   }
 
   // A visitor may only ever touch their own child, which is precisely the path
@@ -626,14 +721,19 @@ const Cloud = (() => {
   // Totals that arrive inside a bigger payload (the initial pull, or a whole-tree
   // put on the stream) still have to reach the page. `notBefore` is when that
   // snapshot was taken, so a visitor's own click cannot be undone by older news.
-  function applyCounters(tree, notBefore) {
+  // `whole === false` marks a PATCH: a patch lists only what changed, so a node
+  // missing from it proves nothing and must not be read as "every total is gone".
+  function applyCounters(tree, notBefore, whole) {
     if (!tree || typeof Counts === 'undefined') return;
     for (const node of ['likes', 'views']) {
       const meter = Counts[node];
       if (!meter) continue;
       const cache = counterCache[node];
       const map = tree[node];
-      if (map == null) { cache.clear(); meter.resetAll(0, notBefore); continue; }  // gone
+      if (map == null) {
+        if (whole === false) continue;
+        cache.clear(); meter.resetAll(0, notBefore); continue;  // node is gone
+      }
       for (const [k, v] of Object.entries(map)) {
         const total = Number(v) || 0;
         cache.set(k, total);
@@ -644,11 +744,40 @@ const Cloud = (() => {
 
   /* ---- 6. real-time watch ------------------------------------------------ */
 
+  /**
+   * pullAll() — one fetch of the whole tree, handed to BOTH halves of the site:
+   * the content cache and the counter badges. hydrateFrom() alone was enough
+   * while only the stream could deliver totals, but every refetch path — the
+   * debounced repull after a patch, and the poller that replaces a stream that
+   * never worked — reads a tree that also carries /likes and /views. Skipping
+   * them is how a tab ended up with numbers frozen at page-load values.
+   * `startedAt` is taken BEFORE the request: the response is a snapshot of that
+   * instant, so a click this tab made while it was in flight is the newer fact.
+   */
+  async function pullAll() {
+    const startedAt = Date.now();
+    const { ok, value: tree } = await pullTree();
+    if (!ok) return false;                     // no answer: believe nothing, change nothing
+    knownCloud = true;
+    if (!tree) {
+      // The server answered "there is nothing here", which is the whole node having
+      // been removed upstream. The local copy stays put — this device is a holder of
+      // the content, not a device to be emptied — but the belief that the shared doc
+      // matched it is dropped, so the next write republishes instead of being
+      // dismissed as churn, and every total is honestly zero because its node is.
+      lastRaw = null; sharedCurrent = false;
+      applyCounters({}, startedAt);
+      return false;
+    }
+    applyCounters(tree, startedAt);
+    return await hydrateFrom(tree);
+  }
+
   function scheduleRepull() {
     clearTimeout(repullTimer);
     repullTimer = setTimeout(async () => {
       if (!enabled()) return;
-      if (await hydrateFrom(await getJSON(nodeURL()))) onChange();
+      if (await pullAll()) onChange();
     }, 250);
   }
 
@@ -679,7 +808,10 @@ const Cloud = (() => {
         meter.note(key, total);
         return;
       }
-      cache.clear();
+      // A put of the node is the node: what it does not list has stopped existing.
+      // A patch lists only what moved, so the keys it leaves out keep their totals
+      // here exactly as they do on the page.
+      if (name === 'put') cache.clear();
       if (data == null || typeof data !== 'object') { meter.resetAll(0); return; }
       for (const [k, v] of Object.entries(data)) {
         const total = Number(v) || 0;
@@ -689,11 +821,25 @@ const Cloud = (() => {
       return;
     }
     if (name === 'put' && path === '/') {
-      applyCounters(data || {});
+      // The contract guarantees a whole-tree put the moment a stream opens, so this
+      // frame is what tells a device what the shared content actually is.
+      knownCloud = true;
+      // A whole-tree put that carries no content node IS the content node being
+      // gone: same republish-instead-of-wipe recovery as the /content branch above.
+      if (!data || data.content == null) { lastRaw = null; sharedCurrent = false; }
+      applyCounters(data || {}, undefined, true);
       if (await hydrateFrom(data || {})) onChange();
       return;
     }
     if (name === 'put' && /^\/content\/?$/.test(path)) {
+      // The content node was removed upstream. This device's own copy is still
+      // intact, so the recovery is to republish rather than to wipe: forgetting
+      // lastRaw is what allows that, because until now this device believed the
+      // database already held exactly what it has. Without it, an admin whose
+      // project got deleted here would keep being told "Saved." while the shared
+      // copy stayed missing, and the one event that would have republished it —
+      // an image write — was skipped as counter churn.
+      if (data == null) { lastRaw = null; sharedCurrent = false; return; }
       if (await applyContent(data)) onChange();
       return;
     }
@@ -708,7 +854,48 @@ const Cloud = (() => {
         return;
       }
     }
+    // A whole-tree patch lists only what changed. Its counters are authoritative
+    // for the keys it does mention, so they go on the page immediately instead of
+    // waiting on the refetch below — but nothing may be inferred from the keys it
+    // leaves out, which is why that refetch still happens for content.
+    if (name === 'patch' && path === '/' && data && typeof data === 'object') {
+      applyCounters(data, undefined, false);
+    }
     scheduleRepull();
+  }
+
+  // Any frame counts: it proves bytes are arriving. It also retires the poller, so
+  // the duplicate work the error path started stops as soon as the stream
+  // recovers. The watchdog is deliberately one-shot and armed only for the
+  // never-connected case: re-arming it for an idle-but-healthy stream would mean
+  // reconnecting, and a reconnect makes the server resend the ENTIRE tree at the
+  // watched path — with images inlined as base64 that is megabytes per idle tab,
+  // far worse than the stall it set out to prevent. A stream that dies later is
+  // caught by onerror, which starts the poller.
+  function noteBeat() {
+    beat = true;
+    clearTimeout(beatTimer); beatTimer = null;
+    stopPolling();
+  }
+
+  // The streaming contract sends a put of the watched node the moment a stream
+  // opens, so a connection that has delivered NOTHING for CONFIG.streamBeatMs is
+  // not a quiet database — it is a dead socket that raised no error, which is
+  // exactly what a buffering proxy or a half-dropped connection looks like. Left
+  // alone it passes for a working live listener while every counter and every
+  // admin edit on the page silently freezes, so the silence is the failure.
+  function armBeatWatchdog() {
+    clearTimeout(beatTimer);
+    beatTimer = setTimeout(() => {
+      if (beat || !enabled()) return;
+      try { if (source) source.close(); } catch (e) {}
+      source = null;
+      startPolling();                       // the page keeps moving meanwhile
+      clearTimeout(retryTimer);
+      retryTimer = setTimeout(() => {
+        if (enabled() && !source && !beat) startWatch(onChange);
+      }, CONFIG.streamRetryMs);
+    }, CONFIG.streamBeatMs);
   }
 
   function startWatch(cb) {
@@ -719,16 +906,28 @@ const Cloud = (() => {
       try {
         source = new EventSource(withAuth(nodeURL()));
         const handle = ev => {
+          noteBeat();
           let payload = null;
           try { payload = JSON.parse(ev.data); } catch (e) { return; }
-          applyEvent(ev.type, payload);
+          // applyEvent is async and nobody awaits it. A throw inside it would
+          // otherwise drop this one update in silence, so it is reported and the
+          // stream is left open for everything that follows.
+          Promise.resolve().then(() => applyEvent(ev.type, payload))
+            .catch(e => console.warn('[cloud] update skipped', e));
         };
         source.addEventListener('put', handle);
-        source.addEventListener('patch', scheduleRepull);
+        // keep-alive carries no payload, but it is proof the socket still delivers.
+        source.addEventListener('keep-alive', noteBeat);
+        // patch goes through the same handler as put: applyEvent understands a
+        // patch of one counter leaf and applies it on the spot, and anything it
+        // does not recognise still ends in scheduleRepull(), so the partial-update
+        // safety net is unchanged.
+        source.addEventListener('patch', handle);
         source.addEventListener('cancel', stopWatch);
         source.addEventListener('auth_revoked', () => deny(401));
         // EventSource reconnects by itself; only if that keeps failing do we poll.
         source.onerror = () => { if (!poller && source) startPolling(); };
+        armBeatWatchdog();
         return true;
       } catch (e) { /* fall through */ }
     }
@@ -740,7 +939,7 @@ const Cloud = (() => {
     stopPolling();
     poller = setInterval(async () => {
       if (!enabled()) return;
-      if (await hydrateFrom(await getJSON(nodeURL()))) onChange();
+      if (await pullAll()) onChange();
     }, CONFIG.pollMs);
   }
   function stopPolling() { if (poller) { clearInterval(poller); poller = null; } }
@@ -748,6 +947,9 @@ const Cloud = (() => {
     if (source) { try { source.close(); } catch (e) {} source = null; }
     stopPolling();
     clearTimeout(repullTimer);
+    clearTimeout(beatTimer); beatTimer = null;
+    clearTimeout(retryTimer); retryTimer = null;
+    beat = false;
   }
 
   /* ---- init -------------------------------------------------------------- */
@@ -763,8 +965,9 @@ const Cloud = (() => {
     restoreAuth();
 
     const pulledAt = Date.now();
-    const tree = await getJSON(nodeURL());
+    const { ok, value: tree } = await pullTree();
     let synced = false, hadData = !!tree;
+    if (ok) knownCloud = true;
     if (tree) {
       // The one pull that happens anyway already carries every counter, so the
       // badges get their real totals without waiting on a per-key read.
@@ -772,9 +975,12 @@ const Cloud = (() => {
       synced = await hydrateFrom(tree);
       lastRaw = tree.content ? fingerprint(tree.content) : lastRaw;
     }
-    // Only a device that can actually write seeds an empty database: otherwise
-    // the first visitor takes a refusal and gets marked read-only for nothing.
-    if (enabled() && !hadData && !(authAvailable() && !authed())) {
+    // A database that answers "empty" is one this device may seed. A database it
+    // could not reach is not, so the seed push is gated on knownCloud, not on
+    // !hadData alone — the two looked identical until pullTree separated them.
+    // Only a device that can actually write seeds: otherwise the first visitor
+    // takes a refusal and gets marked read-only for nothing.
+    if (enabled() && !hadData && knownCloud && !(authAvailable() && !authed())) {
       if (await pushNow()) synced = true;
     }
     if (enabled()) startWatch(onChange);
@@ -791,18 +997,28 @@ const Cloud = (() => {
       if (applying || !enabled() || !detail) return;
       if (kind === 'remove' && detail.type === 'feedback') { deleteFeedback(detail.id); return; }
       if (detail.item && detail.item.type === 'feedback') { putFeedback(detail.item); return; }
-      if (kind === 'image') { queuePush(); return; }
+      if (kind === 'image') { owedMedia = true; queuePush(); return; }
+      // Hold the item in mind until the shared doc has it: a later adoption must
+      // not prune an edit that was never published, nor resurrect a delete that
+      // was not. Once the doc lands the debt is cleared in pushNow.
+      // db.js reports a put as { item } and a remove as { id, item }, so take the
+      // id from whichever shape this write used.
+      const id = detail.id || (detail.item && detail.item.id);
+      if (!id) { queuePush(); return; }
+      if (kind === 'remove') { owedAdds.delete(id); owedDels.add(id); }
+      else { owedDels.delete(id); owedAdds.add(id); }
       queuePush();
     });
     return true;
   }
 
   return {
-    CONFIG, enabled, init, followDB, bumpLike, readLike, bumpView, readView,
+    CONFIG, enabled, init, followDB, flush, bumpLike, readLike, bumpView, readView,
     readCounters, authAvailable, authed, signIn, signOut,
     get status() {
       return { enabled: enabled(), watching: !!source, polling: !!poller,
-        disabled, contentBlocked, signedIn: authed() };
+        disabled, contentBlocked, signedIn: authed(),
+        knownCloud, sharedCurrent, owed: owed() };
     },
   };
 })();

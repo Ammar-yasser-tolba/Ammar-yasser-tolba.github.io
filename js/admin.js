@@ -28,6 +28,45 @@ const Admin = (() => {
 
   const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
 
+  /* ---- cloud reachability, stated honestly ----
+     With no shared database an admin write lands in this browser's IndexedDB and
+     nowhere else. Reporting that as "Saved." is how a certificate added on one
+     laptop ends up missing for every visitor with nobody the wiser: the owner
+     watched it appear. So the message says which of the two happened.
+     Cloud.enabled() is false while CONFIG.databaseURL is empty, and also after
+     Firebase has refused this device. Enabled is not the same as delivered,
+     though: a signed-out owner, a network that will not answer and a rule that
+     rejects the write all leave the change at home, so the toast waits for the
+     publish Cloud.flush() and reports its answer. */
+  const cloudOn = () => typeof Cloud !== 'undefined'
+    && typeof Cloud.enabled === 'function' && Cloud.enabled();
+
+  // Fire-and-forget by design: the modal is already closed and the page already
+  // redrawn when the verdict arrives a moment later. Nothing here may reject —
+  // a toast that cannot be shown must not become an unhandled error.
+  function reportShared(okKey, localKey) {
+    const say = shared => {
+      try { UI.toast(I18N.t(shared ? okKey : localKey), shared ? 'ok' : 'err'); } catch (e) {}
+    };
+    if (!cloudOn() || typeof Cloud.flush !== 'function') return say(false);
+    Promise.resolve().then(() => Cloud.flush()).then(shared => say(!!shared), () => say(false));
+  }
+
+  function toastSaved() { reportShared('saved', 'savedLocal'); }
+
+  function toastDeleted() { reportShared('deleted', 'deletedLocal'); }
+
+  // Once per tab, at the moment admin mode becomes usable — the rest of the
+  // session does not need it repeated on every render.
+  function warnCloudOff() {
+    if (!isAdmin() || cloudOn()) return;
+    try {
+      if (sessionStorage.getItem('cloudWarned')) return;
+      sessionStorage.setItem('cloudWarned', '1');
+    } catch (e) {}
+    UI.toast(I18N.t('cloudOff'), 'err');
+  }
+
   /* ---- schemas for the text(+optional image) sections ---- */
   // Each field: {k, label, type} — type is biText | biArea | text | list |
   // biList | select | image. titleKey/urlKey are required-field checks.
@@ -118,6 +157,7 @@ const Admin = (() => {
     document.body.classList.toggle('admin', isAdmin());
     render.all();
     refreshNotifications();
+    warnCloudOff();
   }
 
   /* ---- unlock prompt (Ctrl+Shift+E) ---- */
@@ -407,7 +447,7 @@ const Admin = (() => {
       }
       if (schema.urlKey && !obj[schema.urlKey]) { err.textContent = I18N.t('urlLbl'); return; }
       await DB.put(obj);
-      m.close(); await render.all(); UI.toast(I18N.t('saved'), 'ok');
+      m.close(); await render.all(); toastSaved();
     });
   }
 
@@ -484,7 +524,7 @@ const Admin = (() => {
         obj.attachments = await persistEntries(attach);
       }
       await DB.put(obj);
-      m.close(); await render.all(); UI.toast(I18N.t('saved'), 'ok');
+      m.close(); await render.all(); toastSaved();
     });
   }
 
@@ -634,7 +674,7 @@ const Admin = (() => {
       const newRef = refs[0] || null;
       if (b.logo && b.logo.key && (!newRef || newRef.key !== b.logo.key)) await DB.delImage(b.logo.key);
       await DB.put({ ...b, name: nm, subtitle: subField.value(), logo: newRef });
-      m.close(); await render.brand(); UI.toast(I18N.t('saved'), 'ok');
+      m.close(); await render.brand(); toastSaved();
     });
   }
 
@@ -663,7 +703,7 @@ const Admin = (() => {
         id: DB.uid('sec'), type: 'section', builtin: false, layout: layoutSel.value,
         title: tv, order: await nextOrder('section'),
       });
-      m.close(); await render.all(); UI.toast(I18N.t('saved'), 'ok');
+      m.close(); await render.all(); toastSaved();
     });
   }
 
@@ -698,7 +738,7 @@ const Admin = (() => {
       const tv = titleField.value();
       if (!tv.en && !tv.ar) { err.textContent = I18N.t('titleRequired'); return; }
       await DB.put({ ...s, title: tv });
-      m.close(); await render.chrome(); UI.toast(I18N.t('saved'), 'ok');
+      m.close(); await render.chrome(); toastSaved();
     });
   }
 
@@ -713,7 +753,7 @@ const Admin = (() => {
     await DB.del(id);
     const node = document.getElementById(id); if (node) node.remove();
     await render.chrome();
-    UI.toast(I18N.t('deleted'), 'ok');
+    toastDeleted();
   }
 
   /* ---- wiring (called once from main.js after DOM ready) ---- */
